@@ -4,7 +4,7 @@ import pandas as pd
 from zoneinfo import ZoneInfo
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaBytesUpload, MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import datetime
 import hashlib
 import time
@@ -284,7 +284,7 @@ def aplicar_marca_dagua(pdf_original_bytes, matricula):
     return buffer_saida.getvalue()
 
 # =====================================================
-# COMUNICAÇÃO FLUXO GOOGLE DRIVE (CORREÇÃO DEFINITIVA)
+# COMUNICAÇÃO FLUXO GOOGLE DRIVE (CORRIGIDO)
 # =====================================================
 def fazer_upload_escala(arquivo_bytes):
     drive_service = conectar_drive()
@@ -307,10 +307,11 @@ def fazer_upload_escala(arquivo_bytes):
     except Exception:
         pass
 
-    # SOLUÇÃO REAL PARA 403 QUOTA EXCEEDED E TYPEERROR:
-    # MediaBytesUpload faz o upload direto via POST (non-resumable) injetando o binário de uma vez.
+    # Importação e configuração corrigidas:
+    # Definir resumable=False força a API a fazer um upload simples (Multipart),
+    # o que contorna o bug da falta de cota/armazenamento da Conta de Serviço.
     metadados = {'name': 'escala_servico_atual.pdf', 'parents': [ID_PASTA_DRIVE]}
-    media = MediaBytesUpload(arquivo_bytes, mimetype='application/pdf')
+    media = MediaIoBaseUpload(BytesIO(arquivo_bytes), mimetype='application/pdf', resumable=False)
     
     try:
         drive_service.files().create(
@@ -437,7 +438,7 @@ def view_alterar_senha_obrigatoria():
             st.error("As senhas inseridas diferem.")
         else:
             if alterar_senha_usuario_planilha(st.session_state["usuario_id"], nova_senha):
-                st.success("Senha atualizada! Redirecionando...")
+                st.success("Senha updated! Redirecionando...")
                 st.session_state["primeiro_acesso"] = False
                 time.sleep(1.5)
                 st.rerun()
