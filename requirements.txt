@@ -1,0 +1,9 @@
+streamlit
+gspread
+pandas
+google-auth
+google-auth-oauthlib
+reportlab
+google-api-python-client
+pypdf
+zoneinfo
