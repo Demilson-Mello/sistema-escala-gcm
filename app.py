@@ -251,14 +251,17 @@ def criar_pdf_marca_dagua(matricula):
     c.setFillColorRGB(0.85, 0.85, 0.85)
     
     # ALTERADO: Define o tamanho da fonte exatamente para 12
-    c.setFont("Helvetica-Bold", 12)
+    c.setFont("Helvetica-Bold", 8)
+    
+    # 0.12 define a opacidade em cerca de 12% (fica bem sutil ao fundo)
+    c.setFillAlpha(0.12)
     
     texto_rastreio = f"{matricula}"
     
     # AJUSTADO: Distâncias menores (X pula de 100 em 100, Y pula de 80 em 80)
     # Isso cria uma grade muito mais preenchida por toda a folha A4
-    for x in range(-50, 650, 100):
-        for y in range(-50, 900, 80):
+    for x in range(-25, 300, 50):
+        for y in range(-25, 400, 40):
             c.saveState()
             c.translate(x, y)
             c.rotate(35) # Mantém a inclinação de segurança
