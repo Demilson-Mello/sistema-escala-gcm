@@ -254,7 +254,7 @@ def criar_pdf_marca_dagua(matricula):
     c = canvas.Canvas(buffer, pagesize=A4)
     
     # 🎨 CONFIGURAÇÃO DA TRANSPARÊNCIA:
-    c.setFillColorRGB(0, 0, 0) 
+    c.setFillColorRGB(1, 0, 0) 
     c.setFillAlpha(0.12)
     
     # Mantém o tamanho da fonte em 12
