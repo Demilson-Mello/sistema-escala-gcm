@@ -27,9 +27,8 @@ st.set_page_config(
 # Constante de fuso horário
 TZ = ZoneInfo("America/Sao_Paulo")
 
-# ATENÇÃO: Substitua pelo ID da pasta do seu Google Drive onde as escalas ficarão salvas.
-# Compartilhe esta pasta no Drive com o e-mail da sua Service Account como "Editor".
-ID_PASTA_DRIVE = "1c_wozV3Y-5LZ_shubqSgdB_GDPLRMrgZ" 
+# LÊ O ID DA PASTA DIRETO DOS SECRETS DO STREAMLIT
+ID_PASTA_DRIVE = st.secrets["ID_PASTA_DRIVE"]
 
 # =====================================================
 # CSS PERSONALIZADO DA INTERFACE
@@ -98,7 +97,6 @@ def conectar_planilha():
             scopes=scope
         )
         client = gspread.authorize(creds)
-        # Substitua pela ID da sua planilha master se necessário
         planilha = client.open_by_key("1p4eVJjnubslCc5mmxj8aHApC6ZTPraD2mvKkD8gBOEI")
         return planilha
     except Exception as e:
@@ -237,7 +235,7 @@ def login_usuario_planilha(tipo_usuario, login, senha):
 
 def alterar_senha_usuario_planilha(id_usuario, nova_senha):
     linha, user = localizar_linha_usuario_por_id(id_usuario)
-    if linha is None: return False
+    if línea is None: return False
     nova_senha_hash = make_hashes(nova_senha)
     usuarios_sheet.update(f"E{linha}:F{linha}", [[nova_senha_hash, 0]])
     registrar_log(user.get("nome", "USUARIO"), "ALTERACAO_SENHA", f"ID_USUARIO {id_usuario}")
@@ -416,7 +414,7 @@ def view_alterar_senha_obrigatoria():
             st.error("As senhas inseridas diferem.")
         else:
             if alterar_senha_usuario_planilha(st.session_state["usuario_id"], nova_senha):
-                st.success("Senha atualizada! Redirecionando...")
+                st.success("Senha updated! Redirecionando...")
                 st.session_state["primeiro_acesso"] = False
                 time.sleep(1.5)
                 st.rerun()
