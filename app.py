@@ -247,19 +247,21 @@ def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     
-    # Define uma cor cinza bem clara com opacidade controlada
-    c.setFillColorRGB(0.82, 0.82, 0.82)
-    c.setFont("Helvetica-Bold", 32)
+    # Define uma cor cinza bem clara com opacidade sutil (ótimo para fontes menores)
+    c.setFillColorRGB(0.85, 0.85, 0.85)
     
-    # Texto limpo contendo unicamente a matrícula do agente rastreado
+    # ALTERADO: Define o tamanho da fonte exatamente para 12
+    c.setFont("Helvetica-Bold", 12)
+    
     texto_rastreio = f"{matricula}"
     
-    # Roda uma malha/grade de repetição cobrindo toda a folha A4 em diagonal
-    for x in range(-100, 700, 220):
-        for y in range(-100, 1000, 180):
+    # AJUSTADO: Distâncias menores (X pula de 100 em 100, Y pula de 80 em 80)
+    # Isso cria uma grade muito mais preenchida por toda a folha A4
+    for x in range(-50, 650, 100):
+        for y in range(-50, 900, 80):
             c.saveState()
             c.translate(x, y)
-            c.rotate(35) # Inclinação padrão de segurança
+            c.rotate(35) # Mantém a inclinação de segurança
             c.drawCentredString(0, 0, texto_rastreio)
             c.restoreState()
             
@@ -283,6 +285,17 @@ def aplicar_marca_dagua(pdf_original_bytes, matricula):
     escritor_pdf.write(buffer_saida)
     buffer_saida.seek(0)
     return buffer_saida.getvalue()
+
+
+
+
+
+
+
+
+
+
+
 
 # =====================================================
 # ENGINE DE COMUNICAÇÃO (SUPABASE STORAGE)
