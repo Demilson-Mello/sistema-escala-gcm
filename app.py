@@ -259,18 +259,16 @@ def criar_pdf_marca_dagua(matricula):
     # Mantém o tamanho da fonte em 12
     c.setFont("Helvetica-Bold", 12)
     
-    # 👇 AQUI ESTÁ A MÁGICA:
-    # Criamos o texto repetido com um espaço entre eles. 
-    # Multiplicar por 2 vai duplicar, por 3 vai triplicar, etc.
-    texto_rastreio = f"{matricula}   {matricula}" 
+    texto_rastreio = f"{matricula}"
     
-    # Grade de repetição por toda a folha A4
-    # Como o texto ficou mais comprido, aumentei levemente o passo do X para não encavalar com a próxima coluna da grade
-    for x in range(-10, 650, 160): 
-        for y in range(-10, 900, 15):
+    # GRADE ALINHADA:
+    # x (horizontal): vai de 20 até 600, pulando de 80 en 80 (cria as colunas com espaço)
+    # y (vertical): vai de 20 até 850, pulando de 25 em 25 (cria as linhas bem próximas)
+    for x in range(20, 600, 80):
+        for y in range(20, 850, 25):
             c.saveState()
             c.translate(x, y)
-            c.rotate(35) # Inclinação padrão de segurança
+            # 💡 Removido o c.rotate(35) para o texto ficar reto em colunas
             c.drawCentredString(0, 0, texto_rastreio)
             c.restoreState()
             
