@@ -241,24 +241,28 @@ def alterar_senha_usuario_planilha(id_usuario, nova_senha):
     return True
 
 # =====================================================
-# MOTOR DE MARCA D'ÁGUA EM TEMPO REAL
+# MOTOR DE MARCA D'ÁGUA EM TODA A EXTENSÃO DO DOCUMENTO (MATRÍCULA EXCLUSIVA)
 # =====================================================
 def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    c.setFillColorRGB(0.78, 0.78, 0.78)
-    c.setFont("Helvetica-Bold", 20)
     
-    c.saveState()
-    c.translate(300, 450)
-    c.rotate(45)
+    # Define uma cor cinza bem clara com opacidade controlada
+    c.setFillColorRGB(0.82, 0.82, 0.82)
+    c.setFont("Helvetica-Bold", 32)
     
-    texto = f"{matricula}"
-    c.drawCentredString(0, 0, texto)
-    c.drawCentredString(0, 160, texto)
-    c.drawCentredString(0, -160, texto)
+    # Texto limpo contendo unicamente a matrícula do agente rastreado
+    texto_rastreio = f"{matricula}"
     
-    c.restoreState()
+    # Roda uma malha/grade de repetição cobrindo toda a folha A4 em diagonal
+    for x in range(-100, 700, 220):
+        for y in range(-100, 1000, 180):
+            c.saveState()
+            c.translate(x, y)
+            c.rotate(35) # Inclinação padrão de segurança
+            c.drawCentredString(0, 0, texto_rastreio)
+            c.restoreState()
+            
     c.showPage()
     c.save()
     buffer.seek(0)
@@ -288,7 +292,6 @@ def fazer_upload_escala(arquivo_bytes):
     if not supabase: return False
         
     try:
-        # Envia substituindo o arquivo anterior automaticamente graças ao upsert=true
         supabase.storage.from_("escalas").upload(
             path="escala_servico_atual.pdf",
             file=arquivo_bytes,
@@ -313,7 +316,6 @@ def baixar_escala_original():
 # INTERFACES VISUAIS (VIEWS ADMINISTRATIVAS - CRUD)
 # =====================================================
 def view_gerenciar_escala_admin():
-    # Cria sub-abas internas para organizar a visão do Administrador
     aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escala", "👥 Gerenciar Usuários (CRUD)"])
     
     # --- SUB-ABA 1: PUBLICAÇÃO DE ESCALAS ---
@@ -413,7 +415,7 @@ def view_gerenciar_escala_admin():
                         else:
                             usuarios_sheet.update(f"B{linha_planilha}:D{linha_planilha}", [[edit_tipo, edit_login, edit_nome]])
                             usuarios_sheet.update(f"G{linha_planilha}", [[edit_status]])
-                            st.success("Dados atualizados com sucesso!")
+                            st.success("Dados updated com sucesso!")
                             registrar_log(st.session_state["nome_usuario"], "CRUD_UPDATE", f"ID: {id_selecionado}")
                             carregar_usuarios.clear()
                             time.sleep(1)
@@ -509,7 +511,7 @@ def view_alterar_senha_obrigatoria():
             st.error("As senhas inseridas diferem.")
         else:
             if alterar_senha_usuario_planilha(st.session_state["usuario_id"], nova_senha):
-                st.success("Senha updated! Redirecionando...")
+                st.success("Senha atualizada! Redirecionando...")
                 st.session_state["primeiro_acesso"] = False
                 time.sleep(1.5)
                 st.rerun()
