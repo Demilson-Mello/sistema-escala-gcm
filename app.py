@@ -253,18 +253,20 @@ def criar_pdf_marca_dagua(matricula):
     c = canvas.Canvas(buffer, pagesize=A4)
     
     # 🎨 CONFIGURAÇÃO DA TRANSPARÊNCIA:
-    # Definimos uma cor cinza escura pura (0, 0, 0 é preto, mas com o alpha baixo vira cinza)
     c.setFillColorRGB(0, 0, 0) 
-    # 0.12 define a opacidade em cerca de 12% (fica bem sutil ao fundo)
     c.setFillAlpha(0.12)
     
     # Mantém o tamanho da fonte em 12
     c.setFont("Helvetica-Bold", 12)
     
-    texto_rastreio = f"{matricula}"
+    # 👇 AQUI ESTÁ A MÁGICA:
+    # Criamos o texto repetido com um espaço entre eles. 
+    # Multiplicar por 2 vai duplicar, por 3 vai triplicar, etc.
+    texto_rastreio = f"{matricula}   {matricula}" 
     
     # Grade de repetição por toda a folha A4
-    for x in range(-30, 650, 100):
+    # Como o texto ficou mais comprido, aumentei levemente o passo do X para não encavalar com a próxima coluna da grade
+    for x in range(-30, 650, 160): 
         for y in range(-10, 900, 15):
             c.saveState()
             c.translate(x, y)
@@ -276,7 +278,6 @@ def criar_pdf_marca_dagua(matricula):
     c.save()
     buffer.seek(0)
     return buffer
-
 
 
 
