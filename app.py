@@ -266,7 +266,7 @@ def criar_pdf_marca_dagua(matricula):
     
     # Grade de repetição por toda a folha A4
     # Como o texto ficou mais comprido, aumentei levemente o passo do X para não encavalar com a próxima coluna da grade
-    for x in range(-30, 650, 160): 
+    for x in range(-10, 650, 160): 
         for y in range(-10, 900, 15):
             c.saveState()
             c.translate(x, y)
