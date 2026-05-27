@@ -265,7 +265,7 @@ def criar_pdf_marca_dagua(matricula):
     
     # Grade de repetição por toda a folha A4
     for x in range(-5, 650, 100):
-        for y in range(-50, 900, 5):
+        for y in range(-50, 900, 10):
             c.saveState()
             c.translate(x, y)
             c.rotate(35) # Inclinação padrão de segurança
