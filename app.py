@@ -98,7 +98,6 @@ def conectar_planilha():
             scopes=scope
         )
         client = gspread.authorize(creds)
-        # CONFIGURADO PARA LER DO SECRET:
         planilha = client.open_by_key(ID_PLANILHA_MASTER)
         return planilha
     except Exception as e:
@@ -292,17 +291,29 @@ def fazer_upload_escala(arquivo_bytes):
     if not drive_service: return False
         
     try:
+        # Busca por arquivos antigos suportando drives compartilhados e herança de cota
         query = f"'{ID_PASTA_DRIVE}' in parents and name = 'escala_servico_atual.pdf' and trashed = false"
-        resultados = drive_service.files().list(q=query, fields="files(id)").execute()
+        resultados = drive_service.files().list(
+            q=query, 
+            fields="files(id)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
+        ).execute()
         for f in resultados.get('files', []):
-            drive_service.files().delete(fileId=f['id']).execute()
+            drive_service.files().delete(fileId=f['id'], supportsAllDrives=True).execute()
     except Exception:
         pass
 
     metadados = {'name': 'escala_servico_atual.pdf', 'parents': [ID_PASTA_DRIVE]}
     media = MediaIoBaseUpload(BytesIO(arquivo_bytes), mimetype='application/pdf', resumable=True)
     try:
-        drive_service.files().create(body=metadados, media_body=media, fields='id').execute()
+        # Adicionado supportsAllDrives=True para forçar o consumo do armazenamento da pasta mãe (sua conta)
+        drive_service.files().create(
+            body=metadados, 
+            media_body=media, 
+            fields='id',
+            supportsAllDrives=True
+        ).execute()
         return True
     except Exception as e:
         st.error(f"Erro no upload para o Google Drive: {e}")
@@ -314,7 +325,12 @@ def baixar_escala_original():
         
     try:
         query = f"'{ID_PASTA_DRIVE}' in parents and name = 'escala_servico_atual.pdf' and trashed = false"
-        resultados = drive_service.files().list(q=query, fields="files(id)").execute()
+        resultados = drive_service.files().list(
+            q=query, 
+            fields="files(id)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
+        ).execute()
         arquivos = resultados.get('files', [])
         
         if not arquivos: return None
