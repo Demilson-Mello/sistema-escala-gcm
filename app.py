@@ -259,18 +259,19 @@ def criar_pdf_marca_dagua(matricula):
     # Mantém o tamanho da fonte em 12
     c.setFont("Helvetica-Bold", 12)
     
-    texto_rastreio = f"{matricula}"
+    # 👇 CRIA A LINHA COMPRIDA: Repete a matrícula 10 vezes na mesma linha, separadas por 2 espaços
+    # Ex: "123123  123123  123123..."
+    linha_texto = "  ".join([f"{matricula}"] * 10)
     
-    # GRADE ALINHADA:
-    # x (horizontal): vai de 20 até 600, pulando de 80 en 80 (cria as colunas com espaço)
-    # y (vertical): vai de 20 até 850, pulando de 25 em 25 (cria as linhas bem próximas)
-    for x in range(20, 600, 80):
-        for y in range(20, 850, 25):
-            c.saveState()
-            c.translate(x, y)
-            # 💡 Removido o c.rotate(35) para o texto ficar reto em colunas
-            c.drawCentredString(0, 0, texto_rastreio)
-            c.restoreState()
+    # Como a linha já é comprida e cobre a folha toda na horizontal,
+    # precisamos apenas controlar o avanço vertical (linhas para cima)
+    # Fixamos o X em -100 para o texto começar antes da margem esquerda e cobrir tudo ao inclinar
+    for y in range(-50, 1000, 20): 
+        c.saveState()
+        c.translate(-100, y) # X fixado à esquerda, Y controlando a altura
+        c.rotate(35)         # Mantém a inclinação padrão de segurança
+        c.drawString(0, 0, linha_texto) # Usa drawString comum para fluir para a direita
+        c.restoreState()
             
     c.showPage()
     c.save()
