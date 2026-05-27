@@ -243,28 +243,32 @@ def alterar_senha_usuario_planilha(id_usuario, nova_senha):
 # =====================================================
 # MOTOR DE MARCA D'ÁGUA EM TODA A EXTENSÃO DO DOCUMENTO (MATRÍCULA EXCLUSIVA)
 # =====================================================
+
+
+
+
+
 def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     
-    # Define uma cor cinza bem clara com opacidade sutil (ótimo para fontes menores)
-    c.setFillColorRGB(0.85, 0.85, 0.85)
-    
-    # ALTERADO: Define o tamanho da fonte exatamente para 12
-    c.setFont("Helvetica-Bold", 8)
-    
+    # 🎨 CONFIGURAÇÃO DA TRANSPARÊNCIA:
+    # Definimos uma cor cinza escura pura (0, 0, 0 é preto, mas com o alpha baixo vira cinza)
+    c.setFillColorRGB(0, 0, 0) 
     # 0.12 define a opacidade em cerca de 12% (fica bem sutil ao fundo)
     c.setFillAlpha(0.12)
     
+    # Mantém o tamanho da fonte em 12
+    c.setFont("Helvetica-Bold", 12)
+    
     texto_rastreio = f"{matricula}"
     
-    # AJUSTADO: Distâncias menores (X pula de 100 em 100, Y pula de 80 em 80)
-    # Isso cria uma grade muito mais preenchida por toda a folha A4
-    for x in range(-25, 300, 50):
-        for y in range(-25, 400, 40):
+    # Grade de repetição por toda a folha A4
+    for x in range(-50, 650, 100):
+        for y in range(-50, 900, 80):
             c.saveState()
             c.translate(x, y)
-            c.rotate(35) # Mantém a inclinação de segurança
+            c.rotate(35) # Inclinação padrão de segurança
             c.drawCentredString(0, 0, texto_rastreio)
             c.restoreState()
             
@@ -272,6 +276,13 @@ def criar_pdf_marca_dagua(matricula):
     c.save()
     buffer.seek(0)
     return buffer
+
+
+
+
+
+
+
 
 def aplicar_marca_dagua(pdf_original_bytes, matricula):
     pdf_original = PdfReader(BytesIO(pdf_original_bytes))
