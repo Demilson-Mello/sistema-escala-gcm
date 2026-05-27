@@ -27,8 +27,9 @@ st.set_page_config(
 # Constante de fuso horário
 TZ = ZoneInfo("America/Sao_Paulo")
 
-# LÊ O ID DA PASTA DIRETO DOS SECRETS DO STREAMLIT
+# LÊ OS DE ID'S DIRETAMENTE DOS SECRETS DO STREAMLIT
 ID_PASTA_DRIVE = st.secrets["ID_PASTA_DRIVE"]
+ID_PLANILHA_MASTER = st.secrets["ID_PLANILHA_MASTER"]
 
 # =====================================================
 # CSS PERSONALIZADO DA INTERFACE
@@ -97,7 +98,8 @@ def conectar_planilha():
             scopes=scope
         )
         client = gspread.authorize(creds)
-        planilha = client.open_by_key("1p4eVJjnubslCc5mmxj8aHApC6ZTPraD2mvKkD8gBOEI")
+        # CONFIGURADO PARA LER DO SECRET:
+        planilha = client.open_by_key(ID_PLANILHA_MASTER)
         return planilha
     except Exception as e:
         st.error(f"Erro ao conectar com o Google Sheets: {e}")
@@ -235,7 +237,7 @@ def login_usuario_planilha(tipo_usuario, login, senha):
 
 def alterar_senha_usuario_planilha(id_usuario, nova_senha):
     linha, user = localizar_linha_usuario_por_id(id_usuario)
-    if línea is None: return False
+    if linha is None: return False
     nova_senha_hash = make_hashes(nova_senha)
     usuarios_sheet.update(f"E{linha}:F{linha}", [[nova_senha_hash, 0]])
     registrar_log(user.get("nome", "USUARIO"), "ALTERACAO_SENHA", f"ID_USUARIO {id_usuario}")
@@ -414,7 +416,7 @@ def view_alterar_senha_obrigatoria():
             st.error("As senhas inseridas diferem.")
         else:
             if alterar_senha_usuario_planilha(st.session_state["usuario_id"], nova_senha):
-                st.success("Senha updated! Redirecionando...")
+                st.success("Senha atualizada! Redirecionando...")
                 st.session_state["primeiro_acesso"] = False
                 time.sleep(1.5)
                 st.rerun()
