@@ -284,14 +284,14 @@ def aplicar_marca_dagua(pdf_original_bytes, matricula):
     return buffer_saida.getvalue()
 
 # =====================================================
-# COMUNICAÇÃO FLUXO GOOGLE DRIVE
+# COMUNICAÇÃO FLUXO GOOGLE DRIVE (CORRIGIDO PARA COTA 403)
 # =====================================================
 def fazer_upload_escala(arquivo_bytes):
     drive_service = conectar_drive()
     if not drive_service: return False
         
     try:
-        # Busca por arquivos antigos suportando drives compartilhados e herança de cota
+        # 1. Procurar e remover arquivos antigos
         query = f"'{ID_PASTA_DRIVE}' in parents and name = 'escala_servico_atual.pdf' and trashed = false"
         resultados = drive_service.files().list(
             q=query, 
@@ -300,14 +300,19 @@ def fazer_upload_escala(arquivo_bytes):
             includeItemsFromAllDrives=True
         ).execute()
         for f in resultados.get('files', []):
-            drive_service.files().delete(fileId=f['id'], supportsAllDrives=True).execute()
+            try:
+                drive_service.files().delete(fileId=f['id'], supportsAllDrives=True).execute()
+            except Exception:
+                pass
     except Exception:
         pass
 
+    # CORREÇÃO CRÍTICA DE COTA: 
+    # Forçamos o chunk_size a -1 e removemos o upload resumível que disparava a trava de cota do robô.
     metadados = {'name': 'escala_servico_atual.pdf', 'parents': [ID_PASTA_DRIVE]}
-    media = MediaIoBaseUpload(BytesIO(arquivo_bytes), mimetype='application/pdf', resumable=True)
+    media = MediaIoBaseUpload(BytesIO(arquivo_bytes), mimetype='application/pdf', chunk_size=-1, resumable=False)
+    
     try:
-        # Adicionado supportsAllDrives=True para forçar o consumo do armazenamento da pasta mãe (sua conta)
         drive_service.files().create(
             body=metadados, 
             media_body=media, 
@@ -317,6 +322,7 @@ def fazer_upload_escala(arquivo_bytes):
         return True
     except Exception as e:
         st.error(f"Erro no upload para o Google Drive: {e}")
+        st.info("💡 Dica técnica: Verifique se a pasta mãe no Google Drive possui armazenamento livre na conta do criador.")
         return False
 
 def baixar_escala_original():
