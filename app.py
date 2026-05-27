@@ -281,7 +281,7 @@ def aplicar_marca_dagua(pdf_original_bytes, matricula):
     return buffer_saida.getvalue()
 
 # =====================================================
-# NOVA ENGINE DE COMUNICAÇÃO (SUPABASE STORAGE)
+# ENGINE DE COMUNICAÇÃO (SUPABASE STORAGE)
 # =====================================================
 def fazer_upload_escala(arquivo_bytes):
     supabase = conectar_supabase()
@@ -307,27 +307,144 @@ def baixar_escala_original():
         dados = supabase.storage.from_("escalas").download("escala_servico_atual.pdf")
         return dados
     except Exception:
-        # Retorna None caso o bucket ainda esteja vazio
         return None
 
 # =====================================================
-# INTERFACES VISUAIS (VIEWS)
+# INTERFACES VISUAIS (VIEWS ADMINISTRATIVAS - CRUD)
 # =====================================================
 def view_gerenciar_escala_admin():
-    st.subheader("⚙️ Publicação e Atualização de Escalas")
-    st.info("Carregue o arquivo em PDF. O sistema irá atualizar e disponibilizar este imediatamente para toda a Guarda.")
+    # Cria sub-abas internas para organizar a visão do Administrador
+    aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escala", "👥 Gerenciar Usuários (CRUD)"])
     
-    arquivo_escala = st.file_uploader("Upload da Escala de Serviço (PDF)", type=["pdf"])
-    if st.button("Publicar Escala Oficial"):
-        if arquivo_escala:
-            with st.spinner("Gravando arquivo no servidor seguro..."):
-                bytes_pdf = arquivo_escala.read()
-                if fazer_upload_escala(bytes_pdf):
-                    st.success("Nova escala publicada com sucesso!")
-                    registrar_log(st.session_state["nome_usuario"], "UPLOAD_ESCALA", arquivo_escala.name)
-        else:
-            st.warning("Selecione um documento em formato PDF antes de enviar.")
+    # --- SUB-ABA 1: PUBLICAÇÃO DE ESCALAS ---
+    with aba_escala:
+        st.subheader("⚙️ Publicação e Atualização de Escalas")
+        st.info("Carregue o arquivo em PDF. O sistema irá atualizar e disponibilizar este imediatamente para toda a Guarda.")
+        
+        arquivo_escala = st.file_uploader("Upload da Escala de Serviço (PDF)", type=["pdf"])
+        if st.button("Publicar Escala Oficial"):
+            if arquivo_escala:
+                with st.spinner("Gravando arquivo no servidor seguro..."):
+                    bytes_pdf = arquivo_escala.read()
+                    if fazer_upload_escala(bytes_pdf):
+                        st.success("Nova escala publicada com sucesso!")
+                        registrar_log(st.session_state["nome_usuario"], "UPLOAD_ESCALA", arquivo_escala.name)
+            else:
+                st.warning("Selecione um documento em formato PDF antes de enviar.")
 
+    # --- SUB-ABA 2: CRUD DE USUÁRIOS COMPLETO ---
+    with aba_usuarios:
+        st.subheader("👥 Painel de Controle de Usuários")
+        
+        df_users = carregar_usuarios()
+        if df_users.empty:
+            st.warning("Nenhum usuário cadastrado.")
+            df_users = pd.DataFrame(columns=["id", "tipo_usuario", "login", "nome", "senha", "primeiro_acesso", "status"])
+        
+        df_users["id"] = pd.to_numeric(df_users["id"], errors="coerce").fillna(0).astype(int)
+        df_users["login"] = df_users["login"].astype(str).str.strip()
+        df_users["nome"] = df_users["nome"].astype(str).str.strip()
+        df_users["status"] = df_users["status"].astype(str).str.strip().str.upper()
+        
+        col_cadastro, col_lista = st.columns([1, 2])
+        
+        # [C]REATE: FORMULÁRIO DE CADASTRO
+        with col_cadastro:
+            st.markdown("### ➕ Novo Cadastro")
+            with st.form("form_cadastro_agente", clear_on_submit=True):
+                novo_nome = st.text_input("Nome Funcional").strip().upper()
+                nova_matricula = st.text_input("Matrícula / Login").strip()
+                tipo_func = st.selectbox("Perfil", ["agente", "admin"])
+                senha_padrao = st.text_input("Senha Inicial", type="password", value="1234")
+                
+                botao_cadastrar = st.form_submit_button("Salvar Usuário")
+                
+                if botao_cadastrar:
+                    if not novo_nome or not nova_matricula:
+                        st.error("Nome e Matrícula são obrigatórios.")
+                    elif nova_matricula in df_users["login"].values:
+                        st.error("⚠️ Esta matrícula já está cadastrada.")
+                    else:
+                        proximo_id = int(df_users["id"].max()) + 1 if not df_users.empty else 1
+                        senha_hash = make_hashes(senha_padrao)
+                        
+                        usuarios_sheet.append_row([
+                            proximo_id, tipo_func, nova_matricula, novo_nome, senha_hash, 1, "ATIVO"
+                        ])
+                        
+                        st.success(f"✅ {novo_nome} cadastrado!")
+                        registrar_log(st.session_state["nome_usuario"], "CRUD_CREATE", f"Matrícula: {nova_matricula}")
+                        carregar_usuarios.clear()
+                        st.rerun()
+                        
+        # [R]EAD, [U]PDATE, RESET & [D]ELETE
+        with col_lista:
+            st.markdown("### 📝 Usuários Cadastrados")
+            st.caption("Selecione um usuário abaixo para editar seus dados, redefinir a senha ou excluí-lo.")
+            
+            lista_usuarios = ["-- Selecione um usuário para gerenciar --"]
+            for _, r in df_users.iterrows():
+                lista_usuarios.append(f"ID {r['id']} | {r['nome']} ({r['login']}) - [{r['status']}]")
+                
+            usuario_selecionado = st.selectbox("Buscar/Editar Usuário", lista_usuarios)
+            
+            if usuario_selecionado != "-- Selecione um usuário para gerenciar --":
+                id_selecionado = int(usuario_selecionado.split("ID ")[1].split(" |")[0])
+                linha_planilha, dados_user = localizar_linha_usuario_por_id(id_selecionado)
+                
+                if linha_planilha:
+                    st.markdown(f"#### Editando: **{dados_user['nome']}**")
+                    
+                    with st.form("form_edicao_usuario"):
+                        edit_nome = st.text_input("Alterar Nome Funcional", value=str(dados_user['nome'])).strip().upper()
+                        edit_login = st.text_input("Alterar Matrícula / Login", value=str(dados_user['login'])).strip()
+                        edit_tipo = st.selectbox("Alterar Perfil", ["agente", "admin"], index=0 if dados_user['tipo_usuario'] == "agente" else 1)
+                        edit_status = st.selectbox("Status da Conta", ["ATIVO", "INATIVO"], index=0 if str(dados_user['status']).upper() == "ATIVO" else 1)
+                        
+                        col_btn1, col_btn2 = st.columns(2)
+                        with col_btn1:
+                            salvar_edicao = st.form_submit_button("💾 Salvar Alterações")
+                        with col_btn2:
+                            forcar_reset = st.form_submit_button("🔄 Redefinir para Senha Padrão (1234)")
+                    
+                    if salvar_edicao:
+                        if not edit_nome or not edit_login:
+                            st.error("Campos não podem ficar vazios.")
+                        else:
+                            usuarios_sheet.update(f"B{linha_planilha}:D{linha_planilha}", [[edit_tipo, edit_login, edit_nome]])
+                            usuarios_sheet.update(f"G{linha_planilha}", [[edit_status]])
+                            st.success("Dados atualizados com sucesso!")
+                            registrar_log(st.session_state["nome_usuario"], "CRUD_UPDATE", f"ID: {id_selecionado}")
+                            carregar_usuarios.clear()
+                            time.sleep(1)
+                            st.rerun()
+                            
+                    if forcar_reset:
+                        senha_padrao_hash = make_hashes("1234")
+                        usuarios_sheet.update(f"E{linha_planilha}:F{linha_planilha}", [[senha_padrao_hash, 1]])
+                        st.success("🔄 Senha resetada para '1234'! O usuário deverá trocá-la no próximo login.")
+                        registrar_log(st.session_state["nome_usuario"], "CRUD_PASSWORD_RESET", f"ID: {id_selecionado}")
+                        carregar_usuarios.clear()
+                        time.sleep(2)
+                        st.rerun()
+                        
+                    st.markdown("---")
+                    st.markdown("⚠️ **Zona de Perigo**")
+                    if st.button("❌ Excluir Usuário do Sistema"):
+                        if id_selecionado == 1:
+                            st.error("Não é possível deletar o Administrador Master do sistema.")
+                        else:
+                            with st.spinner("Removendo do banco de dados..."):
+                                usuarios_sheet.delete_rows(linha_planilha)
+                                st.error(f"Usuário permanentemente excluído.")
+                                registrar_log(st.session_state["nome_usuario"], "CRUD_DELETE", f"Nome: {dados_user['nome']}")
+                                carregar_usuarios.clear()
+                                time.sleep(1.5)
+                                st.rerun()
+
+# =====================================================
+# INTERFACE DO AGENTE (VISUALIZAÇÃO COM MARCA D'ÁGUA)
+# =====================================================
 def view_visualizar_escala_usuario():
     st.subheader("📅 Escala de Serviço Ativa")
     matricula = st.session_state.get("login_usuario", "SEM_MATRICULA").upper()
@@ -357,7 +474,7 @@ def view_visualizar_escala_usuario():
         st.markdown(pdf_display, unsafe_allow_html=True)
 
 # =====================================================
-# RENDERIZAÇÃO E CONTROLE DE TELAS
+# RENDERIZAÇÃO E CONTROLE DE TELAS (LOGIN / SENHA)
 # =====================================================
 def renderizar_tela_login():
     st.sidebar.title("🔐 Acesso Restrito")
@@ -392,7 +509,7 @@ def view_alterar_senha_obrigatoria():
             st.error("As senhas inseridas diferem.")
         else:
             if alterar_senha_usuario_planilha(st.session_state["usuario_id"], nova_senha):
-                st.success("Senha atualizada! Redirecionando...")
+                st.success("Senha updated! Redirecionando...")
                 st.session_state["primeiro_acesso"] = False
                 time.sleep(1.5)
                 st.rerun()
@@ -408,9 +525,9 @@ else:
     st.sidebar.write(f"Credencial: `{st.session_state['tipo_usuario'].upper()}`")
     
     if st.session_state["tipo_usuario"] == "admin":
-        menu = st.sidebar.radio("Navegação", ["Publicar Escala", "Relatório de Logs"])
+        menu = st.sidebar.radio("Navegação", ["Painel Admin", "Relatório de Logs"])
         
-        if menu == "Publicar Escala":
+        if menu == "Painel Admin":
             view_gerenciar_escala_admin()
         elif menu == "Relatório de Logs":
             st.subheader("📋 Auditoria Geral de Acesso a Escalas")
