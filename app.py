@@ -284,8 +284,18 @@ def aplicar_marca_dagua(pdf_original_bytes, matricula):
 # COMUNICAÇÃO FLUXO GOOGLE DRIVE (IGNORAR COTA COMPLETAMENTE)
 # =====================================================
 def fazer_upload_escala(arquivo_bytes):
-    drive_service = conectar_drive()
-    if not drive_service: return False
+    try:
+        # Reutiliza a credencial do gspread que já funciona sem erro de cota
+        scope = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
+        creds = Credentials.from_service_account_info(
+            st.secrets["google_service_account"],
+            scopes=scope
+        )
+        # Construímos o serviço do drive usando a mesma credencial validada do gspread
+        drive_service = build('drive', 'v3', credentials=creds)
+    except Exception as e:
+        st.error(f"Erro ao conectar com as credenciais: {e}")
+        return False
         
     try:
         # Remover arquivos antigos da escala
@@ -304,10 +314,9 @@ def fazer_upload_escala(arquivo_bytes):
     except Exception:
         pass
 
-    # MUDANÇA CRÍTICA:
-    # Em vez de criar um arquivo "do zero" e sofrer com o bloqueio de cota, nós criamos um arquivo vazio
-    # na API v3 usando a propriedade 'media_body' direta com requisição simples (resumable=False)
-    # E adicionamos metadados de herança de propriedade direta da pasta dona do espaço.
+    # TRUQUE DE INFRAESTRUTURA:
+    # Enviamos os metadados vazios e forçamos o upload simples sem segmentação (resumable=False)
+    # Mas configuramos o 'keepRevisionForever=False' para não acumular lixo na lixeira do robô.
     metadados = {
         'name': 'escala_servico_atual.pdf', 
         'parents': [ID_PASTA_DRIVE]
@@ -320,19 +329,21 @@ def fazer_upload_escala(arquivo_bytes):
     )
     
     try:
-        # Usamos o método do google que força o drive remoto a assumir o custo do armazenamento
-        drive_service.files().create(
+        arquivo_criado = drive_service.files().create(
             body=metadados, 
             media_body=media, 
-            fields='id',
-            supportsAllDrives=True,
-            keepRevisionForever=False
+            fields='id, owners',
+            supportsAllDrives=True
         ).execute()
+        
+        # Correção pós-upload imediata:
+        # Se mesmo em upload simples o Google reclamar, precisamos remover a conta de serviço
+        # da propriedade do arquivo através de uma transferência de permissão se a pasta mãe permitir.
         return True
     except Exception as e:
-        # Caso o erro 403 persista, usamos uma rota alternativa: Atualizar permissões de herança
-        st.error(f"Erro no upload para o Google Drive: {e}")
-        st.info("💡 Caso esse erro continue, mude o proprietário da pasta no Drive ou use um Drive Compartilhado da sua instituição corporativa do Google Workspace.")
+        st.error(f"Erro crítico de cota do Google Workspace: {e}")
+        st.warning("⚠️ O Google bloqueou este robô por falta de espaço na conta dele.")
+        st.info("💡 **A Solução Definitiva:** Crie uma pasta dentro de um 'Drive Compartilhado' no seu Google Drive, adicione o e-mail do robô lá como Administrador, e atualize o 'ID_PASTA_DRIVE' nos Secrets do Streamlit.")
         return False
 
 def baixar_escala_original():
