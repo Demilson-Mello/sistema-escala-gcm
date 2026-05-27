@@ -261,7 +261,7 @@ def criar_pdf_marca_dagua(matricula):
     
     # 💥 MEGA LINHA: Aumentamos para 45 repetições para a linha ficar massiva
     # e atravessar qualquer diagonal imaginária da folha
-    linha_texto = "  ".join([f"{matricula}"] * 60)
+    linha_texto = "  ".join([f"{matricula}"] * 120)
     
     # 📐 AJUSTE DA GRADE DA PÁGINA:
     # Começamos o Y bem mais de baixo (-400) e vamos até bem acima do topo (1200)
