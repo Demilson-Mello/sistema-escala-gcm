@@ -255,7 +255,7 @@ def criar_pdf_marca_dagua(matricula):
     
     # 🎨 CONFIGURAÇÃO DA TRANSPARÊNCIA:
     c.setFillColorRGB(1, 0, 0) 
-    c.setFillAlpha(0.12)
+    c.setFillAlpha(0.25)
     
     # Mantém o tamanho da fonte em 12
     c.setFont("Helvetica-Bold", 12)
