@@ -259,20 +259,21 @@ def criar_pdf_marca_dagua(matricula):
     # Mantém o tamanho da fonte em 12
     c.setFont("Helvetica-Bold", 12)
     
-    # 👇 LINHA GIGANTE: Aumentamos para 25 repetições para garantir que cubra a diagonal mais longa da folha
-    linha_texto = "  ".join([f"{matricula}"] * 25)
+    # 💥 MEGA LINHA: Aumentamos para 45 repetições para a linha ficar massiva
+    # e atravessar qualquer diagonal imaginária da folha
+    linha_texto = "  ".join([f"{matricula}"] * 45)
     
-    # Ajustamos o Y para começar bem abaixo (-200) e ir até o topo (1000)
-    # O passo 20 mantém as linhas bem juntas verticalmente
-    for y in range(-200, 1000, 20): 
+    # 📐 AJUSTE DA GRADE DA PÁGINA:
+    # Começamos o Y bem mais de baixo (-400) e vamos até bem acima do topo (1200)
+    # Mudamos o passo para 25 para as linhas ficarem coladas verticalmente igual na sua imagem
+    for y in range(-400, 1200, 25): 
         c.saveState()
         
-        # 👇 MÁGICA DO ALINHAMENTO: 
-        # Começamos o X bem recuado em -400. Assim, mesmo inclinada a 35°, 
-        # a linha atravessa a folha inteira da esquerda para a direita.
-        c.translate(-400, y) 
+        # Recuamos o X para -600. Como a linha agora tem 45 repetições,
+        # ela vai começar muito antes da folha e terminar muito depois, sumindo com os cantos brancos
+        c.translate(-600, y) 
         
-        c.rotate(35) # Mantém a inclinação padrão de segurança
+        c.rotate(35) # Mantém a inclinação de 35°
         c.drawString(0, 0, linha_texto)
         c.restoreState()
             
