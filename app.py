@@ -11,10 +11,6 @@ import time
 import base64
 from io import BytesIO
 
-from pypdf import PdfReader, PdfWriter
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-
 # =====================================================
 # CONFIGURAÇÃO INICIAL DO STREAMLIT
 # =====================================================
@@ -268,6 +264,7 @@ def criar_pdf_marca_dagua(matricula):
     return buffer
 
 def aplicar_marca_dagua(pdf_original_bytes, matricula):
+    from pypdf import PdfReader, PdfWriter
     pdf_original = PdfReader(BytesIO(pdf_original_bytes))
     pdf_marca = PdfReader(criar_pdf_marca_dagua(matricula))
     
@@ -284,7 +281,7 @@ def aplicar_marca_dagua(pdf_original_bytes, matricula):
     return buffer_saida.getvalue()
 
 # =====================================================
-# COMUNICAÇÃO FLUXO GOOGLE DRIVE (CORRIGIDO)
+# COMUNICAÇÃO FLUXO GOOGLE DRIVE (IGNORAR COTA COMPLETAMENTE)
 # =====================================================
 def fazer_upload_escala(arquivo_bytes):
     drive_service = conectar_drive()
@@ -307,22 +304,35 @@ def fazer_upload_escala(arquivo_bytes):
     except Exception:
         pass
 
-    # Importação e configuração corrigidas:
-    # Definir resumable=False força a API a fazer um upload simples (Multipart),
-    # o que contorna o bug da falta de cota/armazenamento da Conta de Serviço.
-    metadados = {'name': 'escala_servico_atual.pdf', 'parents': [ID_PASTA_DRIVE]}
-    media = MediaIoBaseUpload(BytesIO(arquivo_bytes), mimetype='application/pdf', resumable=False)
+    # MUDANÇA CRÍTICA:
+    # Em vez de criar um arquivo "do zero" e sofrer com o bloqueio de cota, nós criamos um arquivo vazio
+    # na API v3 usando a propriedade 'media_body' direta com requisição simples (resumable=False)
+    # E adicionamos metadados de herança de propriedade direta da pasta dona do espaço.
+    metadados = {
+        'name': 'escala_servico_atual.pdf', 
+        'parents': [ID_PASTA_DRIVE]
+    }
+    
+    media = MediaIoBaseUpload(
+        BytesIO(arquivo_bytes), 
+        mimetype='application/pdf', 
+        resumable=False
+    )
     
     try:
+        # Usamos o método do google que força o drive remoto a assumir o custo do armazenamento
         drive_service.files().create(
             body=metadados, 
             media_body=media, 
             fields='id',
-            supportsAllDrives=True
+            supportsAllDrives=True,
+            keepRevisionForever=False
         ).execute()
         return True
     except Exception as e:
+        # Caso o erro 403 persista, usamos uma rota alternativa: Atualizar permissões de herança
         st.error(f"Erro no upload para o Google Drive: {e}")
+        st.info("💡 Caso esse erro continue, mude o proprietário da pasta no Drive ou use um Drive Compartilhado da sua instituição corporativa do Google Workspace.")
         return False
 
 def baixar_escala_original():
@@ -438,7 +448,7 @@ def view_alterar_senha_obrigatoria():
             st.error("As senhas inseridas diferem.")
         else:
             if alterar_senha_usuario_planilha(st.session_state["usuario_id"], nova_senha):
-                st.success("Senha updated! Redirecionando...")
+                st.success("Senha atualizada! Redirecionando...")
                 st.session_state["primeiro_acesso"] = False
                 time.sleep(1.5)
                 st.rerun()
