@@ -248,6 +248,7 @@ def alterar_senha_usuario_planilha(id_usuario, nova_senha):
 
 
 
+
 def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -259,20 +260,20 @@ def criar_pdf_marca_dagua(matricula):
     # Mantém o tamanho da fonte em 12
     c.setFont("Helvetica-Bold", 12)
     
-    # 💥 MEGA LINHA: Aumentamos para 45 repetições para a linha ficar massiva
-    # e atravessar qualquer diagonal imaginária da folha
-    linha_texto = "  ".join([f"{matricula}"] * 120)
+    # Linha comprida com 40 repetições (tamanho ideal para cruzar o A4)
+    linha_texto = "  ".join([f"{matricula}"] * 40)
     
-    # 📐 AJUSTE DA GRADE DA PÁGINA:
-    # Começamos o Y bem mais de baixo (-400) e vamos até bem acima do topo (1200)
-    # Mudamos o passo para 25 para as linhas ficarem coladas verticalmente igual na sua imagem
-    for y in range(-400, 1200, 25): 
+    # 📐 COBERTURA COMPLETA DA PÁGINA:
+    # O Y começa em -400 (para cobrir o rodapé direito) e vai até 1100 (topo)
+    for y in range(-400, 1100, 25): 
         c.saveState()
         
-        # Recuamos o X para -600. Como a linha agora tem 45 repetições,
-        # ela vai começar muito antes da folha e terminar muito depois, sumindo com os cantos brancos
-        c.translate(-600, y) 
+        # 💥 TRUQUE DO DESLOCAMENTO (X dinâmico):
+        # Fazendo o X recuar um pouco com base no Y, garantimos que as linhas 
+        # acompanhem a inclinação de 35° perfeitamente desde o canto inferior esquerdo!
+        x_dinamico = -200 - (y * 0.5)
         
+        c.translate(x_dinamico, y) 
         c.rotate(35) # Mantém a inclinação de 35°
         c.drawString(0, 0, linha_texto)
         c.restoreState()
