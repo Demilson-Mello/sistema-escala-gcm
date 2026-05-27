@@ -3,13 +3,16 @@ import gspread
 import pandas as pd
 from zoneinfo import ZoneInfo
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
+from supabase import create_client
 from datetime import datetime
 import hashlib
 import time
 import base64
 from io import BytesIO
+
+from pypdf import PdfReader, PdfWriter
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 # =====================================================
 # CONFIGURAÇÃO INICIAL DO STREAMLIT
@@ -23,8 +26,7 @@ st.set_page_config(
 # Constante de fuso horário
 TZ = ZoneInfo("America/Sao_Paulo")
 
-# LÊ OS DE ID'S DIRETAMENTE DOS SECRETS DO STREAMLIT
-ID_PASTA_DRIVE = st.secrets["ID_PASTA_DRIVE"]
+# LÊ OS ID'S E CHAVES DIRETAMENTE DOS SECRETS DO STREAMLIT
 ID_PLANILHA_MASTER = st.secrets["ID_PLANILHA_MASTER"]
 
 # =====================================================
@@ -84,7 +86,7 @@ def logout():
     st.rerun()
 
 # =====================================================
-# CONEXÕES COM GOOGLE APIS (SHEETS & DRIVE)
+# CONEXÃO COM GOOGLE SHEETS (SISTEMA DE USUÁRIOS)
 # =====================================================
 def conectar_planilha():
     try:
@@ -105,17 +107,16 @@ try:
 except:
     st.stop()
 
-def conectar_drive():
+# =====================================================
+# CONEXÃO COM SUPABASE STORAGE (ARMAZENAMENTO GRATUITO)
+# =====================================================
+def conectar_supabase():
     try:
-        scope = ["https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(
-            st.secrets["google_service_account"],
-            scopes=scope
-        )
-        service = build('drive', 'v3', credentials=creds)
-        return service
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        return create_client(url, key)
     except Exception as e:
-        st.error(f"Erro ao conectar com o Google Drive: {e}")
+        st.error(f"Erro nas credenciais do Supabase: {e}")
         return None
 
 # =====================================================
@@ -245,7 +246,7 @@ def alterar_senha_usuario_planilha(id_usuario, nova_senha):
 def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    c.setFillColorRGB(0.78, 0.78, 0.78)  # Marca d'água cinza suave
+    c.setFillColorRGB(0.78, 0.78, 0.78)
     c.setFont("Helvetica-Bold", 38)
     
     c.saveState()
@@ -264,7 +265,6 @@ def criar_pdf_marca_dagua(matricula):
     return buffer
 
 def aplicar_marca_dagua(pdf_original_bytes, matricula):
-    from pypdf import PdfReader, PdfWriter
     pdf_original = PdfReader(BytesIO(pdf_original_bytes))
     pdf_marca = PdfReader(criar_pdf_marca_dagua(matricula))
     
@@ -281,100 +281,33 @@ def aplicar_marca_dagua(pdf_original_bytes, matricula):
     return buffer_saida.getvalue()
 
 # =====================================================
-# COMUNICAÇÃO FLUXO GOOGLE DRIVE (IGNORAR COTA COMPLETAMENTE)
+# NOVA ENGINE DE COMUNICAÇÃO (SUPABASE STORAGE)
 # =====================================================
 def fazer_upload_escala(arquivo_bytes):
+    supabase = conectar_supabase()
+    if not supabase: return False
+        
     try:
-        # Reutiliza a credencial do gspread que já funciona sem erro de cota
-        scope = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_info(
-            st.secrets["google_service_account"],
-            scopes=scope
+        # Envia substituindo o arquivo anterior automaticamente graças ao upsert=true
+        supabase.storage.from_("escalas").upload(
+            path="escala_servico_atual.pdf",
+            file=arquivo_bytes,
+            file_options={"cache-control": "0", "upsert": "true"}
         )
-        # Construímos o serviço do drive usando a mesma credencial validada do gspread
-        drive_service = build('drive', 'v3', credentials=creds)
-    except Exception as e:
-        st.error(f"Erro ao conectar com as credenciais: {e}")
-        return False
-        
-    try:
-        # Remover arquivos antigos da escala
-        query = f"'{ID_PASTA_DRIVE}' in parents and name = 'escala_servico_atual.pdf' and trashed = false"
-        resultados = drive_service.files().list(
-            q=query, 
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True
-        ).execute()
-        for f in resultados.get('files', []):
-            try:
-                drive_service.files().delete(fileId=f['id'], supportsAllDrives=True).execute()
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    # TRUQUE DE INFRAESTRUTURA:
-    # Enviamos os metadados vazios e forçamos o upload simples sem segmentação (resumable=False)
-    # Mas configuramos o 'keepRevisionForever=False' para não acumular lixo na lixeira do robô.
-    metadados = {
-        'name': 'escala_servico_atual.pdf', 
-        'parents': [ID_PASTA_DRIVE]
-    }
-    
-    media = MediaIoBaseUpload(
-        BytesIO(arquivo_bytes), 
-        mimetype='application/pdf', 
-        resumable=False
-    )
-    
-    try:
-        arquivo_criado = drive_service.files().create(
-            body=metadados, 
-            media_body=media, 
-            fields='id, owners',
-            supportsAllDrives=True
-        ).execute()
-        
-        # Correção pós-upload imediata:
-        # Se mesmo em upload simples o Google reclamar, precisamos remover a conta de serviço
-        # da propriedade do arquivo através de uma transferência de permissão se a pasta mãe permitir.
         return True
     except Exception as e:
-        st.error(f"Erro crítico de cota do Google Workspace: {e}")
-        st.warning("⚠️ O Google bloqueou este robô por falta de espaço na conta dele.")
-        st.info("💡 **A Solução Definitiva:** Crie uma pasta dentro de um 'Drive Compartilhado' no seu Google Drive, adicione o e-mail do robô lá como Administrador, e atualize o 'ID_PASTA_DRIVE' nos Secrets do Streamlit.")
+        st.error(f"Erro no envio para o servidor Supabase: {e}")
         return False
 
 def baixar_escala_original():
-    drive_service = conectar_drive()
-    if not drive_service: return None
+    supabase = conectar_supabase()
+    if not supabase: return None
         
     try:
-        query = f"'{ID_PASTA_DRIVE}' in parents and name = 'escala_servico_atual.pdf' and trashed = false"
-        resultados = drive_service.files().list(
-            q=query, 
-            fields="files(id)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True
-        ).execute()
-        arquivos = resultados.get('files', [])
-        
-        if not arquivos: return None
-            
-        file_id = arquivos[0]['id']
-        requisicao = drive_service.files().get_media(fileId=file_id)
-        buffer = BytesIO()
-        baixador = MediaIoBaseDownload(buffer, requisicao)
-        
-        concluido = False
-        while not concluido:
-            _, concluido = baixador.next_chunk()
-            
-        buffer.seek(0)
-        return buffer.getvalue()
-    except Exception as e:
-        st.error(f"Erro ao carregar escala do Drive: {e}")
+        dados = supabase.storage.from_("escalas").download("escala_servico_atual.pdf")
+        return dados
+    except Exception:
+        # Retorna None caso o bucket ainda esteja vazio
         return None
 
 # =====================================================
@@ -382,12 +315,12 @@ def baixar_escala_original():
 # =====================================================
 def view_gerenciar_escala_admin():
     st.subheader("⚙️ Publicação e Atualização de Escalas")
-    st.info("Carregue o arquivo em PDF. O sistema irá arquivar o antigo e disponibilizar este imediatamente para toda a Guarda.")
+    st.info("Carregue o arquivo em PDF. O sistema irá atualizar e disponibilizar este imediatamente para toda a Guarda.")
     
     arquivo_escala = st.file_uploader("Upload da Escala de Serviço (PDF)", type=["pdf"])
-    if st.button("Publicar no Google Drive"):
+    if st.button("Publicar Escala Oficial"):
         if arquivo_escala:
-            with st.spinner("Processando e enviando para nuvem..."):
+            with st.spinner("Gravando arquivo no servidor seguro..."):
                 bytes_pdf = arquivo_escala.read()
                 if fazer_upload_escala(bytes_pdf):
                     st.success("Nova escala publicada com sucesso!")
@@ -471,7 +404,6 @@ if not st.session_state["logado"]:
 elif st.session_state["primeiro_acesso"]:
     view_alterar_senha_obrigatoria()
 else:
-    # Barra lateral de status fixa
     st.sidebar.write(f"Usuário ativo: **{st.session_state['nome_usuario']}**")
     st.sidebar.write(f"Credencial: `{st.session_state['tipo_usuario'].upper()}`")
     
@@ -484,7 +416,6 @@ else:
             st.subheader("📋 Auditoria Geral de Acesso a Escalas")
             st.dataframe(carregar_logs(), use_container_width=True)
     else:
-        # Usuário Comum entra direto na tela da escala dele
         view_visualizar_escala_usuario()
         
     if st.sidebar.button("Desconectar / Sair"):
