@@ -247,13 +247,13 @@ def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     c.setFillColorRGB(0.78, 0.78, 0.78)
-    c.setFont("Helvetica-Bold", 38)
+    c.setFont("Helvetica-Bold", 20)
     
     c.saveState()
     c.translate(300, 450)
     c.rotate(45)
     
-    texto = f"COPIA DE SEGURANCA - MATRICULA: {matricula}"
+    texto = f"{matricula}"
     c.drawCentredString(0, 0, texto)
     c.drawCentredString(0, 160, texto)
     c.drawCentredString(0, -160, texto)
