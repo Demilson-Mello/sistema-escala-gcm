@@ -18,7 +18,7 @@ from reportlab.pdfgen import canvas
 # CONFIGURAÇÃO INICIAL DO STREAMLIT
 # =====================================================
 st.set_page_config(
-    page_title="Escala de Serviço- GCMCF",
+    page_title="Gestão de Escalas - GCM",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -66,22 +66,34 @@ st.markdown("""
         color: #6b7280;
         margin-bottom: 1.2rem;
     }
-    .card-download {
-        background-color: #f3f4f6;
-        padding: 15px;
+    .escala-container {
+        background-color: #ffffff;
+        padding: 20px;
         border-radius: 8px;
-        border-left: 5px solid #1d4ed8;
-        margin-bottom: 10px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .escala-titulo {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #1e3a8a;
+        margin-bottom: 5px;
+    }
+    .escala-detalhe {
+        color: #4b5563;
+        font-size: 0.9rem;
+        margin-bottom: 15px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown(
-    '<div class="main-title">📅 Sistema de Escala de Serviço | GCMCF</div>',
+    '<div class="main-title">📅 Sistema de Distribuição Segura de Escalas | GCM</div>',
     unsafe_allow_html=True
 )
 st.markdown(
-    '<div class="sub-title">Download seguro de escalas com marca d\'água digital.</div>',
+    '<div class="sub-title">Download seguro de escalas com marca d\'água digital e rastreamento por auditoria.</div>',
     unsafe_allow_html=True
 )
 
@@ -271,44 +283,34 @@ def alterar_senha_usuario_planilha(id_usuario, nova_senha):
     return True
 
 # =====================================================
-# MOTOR DE MARCA D'ÁGUA (MATRÍCULA EXCLUSIVA)
+# MOTOR DE MARCA D'ÁGUA ULTRA-DENSO ANTI-IA
 # =====================================================
 def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     
-    # Lista de opacidades variadas para quebrar o padrão geométrico que a IA procura
     opacidades = [0.15, 0.22, 0.28, 0.18]
-    
-    # Aumentamos o número de repetições do texto na mesma linha (de 35 para 50)
     linha_texto = "  ".join([f"{matricula}"] * 50)
     
-    # CAMADA 1: Linhas inclinadas para a direita (35 graus)
-    # Diminuímos o passo do 'range' de 35 para 20 (isso coloca o dobro de linhas na tela)
+    # Camada 1
     for i, y in enumerate(range(-400, 1200, 20)): 
         c.saveState()
         opacidade_atual = opacidades[i % len(opacidades)]
-        
-        c.setFillColorRGB(0, 0, 0) # Vermelho de segurança
+        c.setFillColorRGB(0.8, 0, 0)
         c.setFillAlpha(opacidade_atual)
-        c.setFont("Helvetica-Bold", 10) # Tamanho levemente menor para caber mais texto sem borrar
-        
-        # Deslocamento horizontal dinâmico
+        c.setFont("Helvetica-Bold", 10)
         x_dinamico = -200 - (y * 0.4) + (i % 3 * 15)
-        
         c.translate(x_dinamico, y) 
         c.rotate(35)
         c.drawString(0, 0, linha_texto)
         c.restoreState()
         
-    # CAMADA 2: Cruzamento Inverso (Linhas a -35 graus)
-    # Diminuímos o passo de 70 para 40 para adensar também o cruzamento contra-IA
+    # Camada 2
     for i, y in enumerate(range(-400, 1200, 40)): 
         c.saveState()
-        c.setFillColorRGB(0.1, 0.1, 0.1)
+        c.setFillColorRGB(0.7, 0.1, 0.1)
         c.setFillAlpha(0.12)
         c.setFont("Helvetica-Bold", 9)
-        
         x_dinamico = -100 + (y * 0.3)
         c.translate(x_dinamico, y)
         c.rotate(-35)
@@ -366,7 +368,7 @@ def baixar_escala_original(nome_arquivo_supabase):
 # INTERFACES VISUAIS (VIEWS ADMINISTRATIVAS - CRUD)
 # =====================================================
 def view_gerenciar_escala_admin():
-    aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escalas", "👥 Gerenciar Usuários"])
+    aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escalas", "👥 Gerenciar Usuários (CRUD)"])
     
     with aba_escala:
         st.subheader("⚙️ Publicação de Escalas por Período")
@@ -458,15 +460,15 @@ def view_gerenciar_escala_admin():
                         st.rerun()
 
 # =====================================================
-# NOVA INTERFACE DO AGENTE (APENAS LISTA DE DOWNLOADS)
+# INTERFACE DO AGENTE (COM TÍTULOS RESPECTIVOS)
 # =====================================================
 def view_visualizar_escala_usuario():
     st.subheader("📥 Central de Downloads - Escalas de Serviço")
-    st.info("Selecione o mês e o ano abaixo para listar os documentos oficiais disponíveis para baixar.")
+    st.info("Selecione o mês e o ano abaixo para listar as escalas disponíveis para download.")
     
     matricula = st.session_state.get("login_usuario", "SEM_MATRICULA").upper()
     
-    # Filtro de Período para não poluir a tela
+    # Filtro de Período
     col_mes, col_ano = st.columns(2)
     with col_mes:
         mes_desejado = st.selectbox("Filtrar por Mês:", MESES)
@@ -474,51 +476,41 @@ def view_visualizar_escala_usuario():
         ano_desejado = st.selectbox("Filtrar por Ano:", ANOS, index=1)
         
     st.markdown("---")
-    st.markdown("### 📋 Documentos do Período:")
     
-    # Renderiza a lista de escalas disponíveis para o período filtrado
+    # Renderiza a lista de escalas formatada com títulos respetivos
     for nome_exibicao, prefixo in ESCALAS_DISPONIVEIS.items():
         nome_arquivo_target = gerar_nome_arquivo(prefixo, mes_desejado, ano_desejado)
         
-        # Estrutura visual em formato de lista/cards de download
-        col_escala_info, col_botao_acao = st.columns([3, 1])
+        # Bloco visual empacotado via HTML/CSS
+        st.markdown(f"""
+        <div class="escala-container">
+            <div class="escala-titulo">📋 Escala do {nome_exibicao}</div>
+            <div class="escala-detalhe">Período de Referência: {mes_desejado} de {ano_desejado} | Ficheiro: {nome_arquivo_target}</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with col_escala_info:
-            st.markdown(f"""
-            <div class="card-download">
-                <strong>📌 {nome_exibicao}</strong><br>
-                <small style="color: #4b5563;">Referência: {mes_desejado}/{ano_desejado} | Arquivo Base: {nome_arquivo_target}</small>
-            </div>
-            """, unsafe_allow_html=True)
-            
-        with col_botao_acao:
-            # Espaçamento para alinhar o botão ao card
-            st.write("")
-            
-            # O download e o processamento ocorrem apenas ao clicar no botão correspondente
-            file_key = f"btn_{prefixo}_{mes_desejado}_{ano_desejado}"
-            
-            # Como precisamos baixar o arquivo para verificar se existe, fazemos isso sob demanda de clique
-            pdf_original = baixar_escala_original(nome_arquivo_target)
-            
-            if pdf_original:
-                # Se o arquivo existe no Supabase, gera o arquivo com a marca d'água em background
-                pdf_com_marca = aplicar_marca_dagua(pdf_original, matricula)
-                
-                st.download_button(
-                    label="📥 Baixar PDF",
-                    data=pdf_com_marca,
-                    file_name=f"{nome_arquivo_target.replace('.pdf', '')}_{matricula}.pdf",
-                    mime="application/pdf",
-                    key=file_key,
-                    on_click=lambda f=nome_arquivo_target: registrar_log(
-                        st.session_state["nome_usuario"], 
-                        "DOWNLOAD_ESCALA", 
-                        f"{f} | Matrícula: {matricula}"
-                    )
+        # Botão posicionado logo abaixo do bloco de informações respetivo
+        file_key = f"btn_{prefixo}_{mes_desejado}_{ano_desejado}"
+        pdf_original = baixar_escala_original(nome_arquivo_target)
+        
+        if pdf_original:
+            pdf_com_marca = aplicar_marca_dagua(pdf_original, matricula)
+            st.download_button(
+                label=f"📥 Baixar Escala do {nome_exibicao} ({matricula})",
+                data=pdf_com_marca,
+                file_name=f"{nome_arquivo_target.replace('.pdf', '')}_{matricula}.pdf",
+                mime="application/pdf",
+                key=file_key,
+                on_click=lambda f=nome_arquivo_target: registrar_log(
+                    st.session_state["nome_usuario"], 
+                    "DOWNLOAD_ESCALA", 
+                    f"{f} | Matrícula: {matricula}"
                 )
-            else:
-                st.button("❌ Não Publicada", key=file_key, disabled=True)
+            )
+        else:
+            st.button(f"❌ Escala do {nome_exibicao} Não Publicada", key=file_key, disabled=True)
+            
+        st.markdown("<br>", unsafe_allow_html=True)
 
 # =====================================================
 # RENDERIZAÇÃO E CONTROLE DE TELAS
