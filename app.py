@@ -29,6 +29,13 @@ TZ = ZoneInfo("America/Sao_Paulo")
 # LÊ OS ID'S E CHAVES DIRETAMENTE DOS SECRETS DO STREAMLIT
 ID_PLANILHA_MASTER = st.secrets["ID_PLANILHA_MASTER"]
 
+# Dicionário mapeando as escalas para os nomes dos arquivos no Supabase
+ESCALAS_DISPONIVEIS = {
+    "1º Distrito": "escala_1_distrito.pdf",
+    "2º Distrito": "escala_2_distrito.pdf",
+    "Marítima e Ambiental": "escala_maritima_ambiental.pdf"
+}
+
 # =====================================================
 # CSS PERSONALIZADO DA INTERFACE
 # =====================================================
@@ -243,38 +250,21 @@ def alterar_senha_usuario_planilha(id_usuario, nova_senha):
 # =====================================================
 # MOTOR DE MARCA D'ÁGUA EM TODA A EXTENSÃO DO DOCUMENTO (MATRÍCULA EXCLUSIVA)
 # =====================================================
-
-
-
-
-
-
 def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     
-    # 🎨 CONFIGURAÇÃO DA TRANSPARÊNCIA:
     c.setFillColorRGB(1, 0, 0) 
     c.setFillAlpha(0.25)
-    
-    # Mantém o tamanho da fonte em 12
     c.setFont("Helvetica-Bold", 12)
     
-    # Linha comprida com 40 repetições (tamanho ideal para cruzar o A4)
     linha_texto = "  ".join([f"{matricula}"] * 40)
     
-    # 📐 COBERTURA COMPLETA DA PÁGINA:
-    # O Y começa em -400 (para cobrir o rodapé direito) e vai até 1100 (topo)
     for y in range(-400, 1100, 25): 
         c.saveState()
-        
-        # 💥 TRUQUE DO DESLOCAMENTO (X dinâmico):
-        # Fazendo o X recuar um pouco com base no Y, garantimos que as linhas 
-        # acompanhem a inclinação de 35° perfeitamente desde o canto inferior esquerdo!
         x_dinamico = -200 - (y * 0.5)
-        
         c.translate(x_dinamico, y) 
-        c.rotate(35) # Mantém a inclinação de 35°
+        c.rotate(35)
         c.drawString(0, 0, linha_texto)
         c.restoreState()
             
@@ -282,11 +272,6 @@ def criar_pdf_marca_dagua(matricula):
     c.save()
     buffer.seek(0)
     return buffer
-
-
-
-
-
 
 def aplicar_marca_dagua(pdf_original_bytes, matricula):
     pdf_original = PdfReader(BytesIO(pdf_original_bytes))
@@ -304,27 +289,16 @@ def aplicar_marca_dagua(pdf_original_bytes, matricula):
     buffer_saida.seek(0)
     return buffer_saida.getvalue()
 
-
-
-
-
-
-
-
-
-
-
-
 # =====================================================
 # ENGINE DE COMUNICAÇÃO (SUPABASE STORAGE)
 # =====================================================
-def fazer_upload_escala(arquivo_bytes):
+def fazer_upload_escala(arquivo_bytes, nome_arquivo_supabase):
     supabase = conectar_supabase()
     if not supabase: return False
         
     try:
         supabase.storage.from_("escalas").upload(
-            path="escala_servico_atual.pdf",
+            path=nome_arquivo_supabase,
             file=arquivo_bytes,
             file_options={"cache-control": "0", "upsert": "true"}
         )
@@ -333,12 +307,12 @@ def fazer_upload_escala(arquivo_bytes):
         st.error(f"Erro no envio para o servidor Supabase: {e}")
         return False
 
-def baixar_escala_original():
+def baixar_escala_original(nome_arquivo_supabase):
     supabase = conectar_supabase()
     if not supabase: return None
         
     try:
-        dados = supabase.storage.from_("escalas").download("escala_servico_atual.pdf")
+        dados = supabase.storage.from_("escalas").download(nome_arquivo_supabase)
         return dados
     except Exception:
         return None
@@ -347,21 +321,26 @@ def baixar_escala_original():
 # INTERFACES VISUAIS (VIEWS ADMINISTRATIVAS - CRUD)
 # =====================================================
 def view_gerenciar_escala_admin():
-    aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escala", "👥 Gerenciar Usuários (CRUD)"])
+    aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escalas", "👥 Gerenciar Usuários (CRUD)"])
     
     # --- SUB-ABA 1: PUBLICAÇÃO DE ESCALAS ---
     with aba_escala:
-        st.subheader("⚙️ Publicação e Atualização de Escalas")
-        st.info("Carregue o arquivo em PDF. O sistema irá atualizar e disponibilizar este imediatamente para toda a Guarda.")
+        st.subheader("⚙️ Publicação e Atualização de Escalas Específicas")
+        st.info("Selecione o grupamento/distrito correto, carregue o arquivo em PDF e publique.")
         
-        arquivo_escala = st.file_uploader("Upload da Escala de Serviço (PDF)", type=["pdf"])
+        # Caixa de seleção da escala que o administrador deseja atualizar
+        escala_selecionada_admin = st.selectbox("Selecione qual Escala deseja Publicar/Atualizar:", list(ESCALAS_DISPONIVEIS.keys()))
+        nome_arquivo_supabase = ESCALAS_DISPONIVEIS[escala_selecionada_admin]
+        
+        arquivo_escala = st.file_uploader(f"Upload da {escala_selecionada_admin} (PDF)", type=["pdf"], key="uploader_admin")
+        
         if st.button("Publicar Escala Oficial"):
             if arquivo_escala:
-                with st.spinner("Gravando arquivo no servidor seguro..."):
+                with st.spinner(f"Gravando arquivo da escala '{escala_selecionada_admin}' no servidor seguro..."):
                     bytes_pdf = arquivo_escala.read()
-                    if fazer_upload_escala(bytes_pdf):
-                        st.success("Nova escala publicada com sucesso!")
-                        registrar_log(st.session_state["nome_usuario"], "UPLOAD_ESCALA", arquivo_escala.name)
+                    if fazer_upload_escala(bytes_pdf, nome_arquivo_supabase):
+                        st.success(f"Escala oficial do **{escala_selecionada_admin}** publicada com sucesso!")
+                        registrar_log(st.session_state["nome_usuario"], "UPLOAD_ESCALA", f"{escala_selecionada_admin} - {arquivo_escala.name}")
             else:
                 st.warning("Selecione um documento em formato PDF antes de enviar.")
 
@@ -479,13 +458,17 @@ def view_gerenciar_escala_admin():
 # INTERFACE DO AGENTE (VISUALIZAÇÃO COM MARCA D'ÁGUA)
 # =====================================================
 def view_visualizar_escala_usuario():
-    st.subheader("📅 Escala de Serviço Ativa")
+    st.subheader("📅 Consulta de Escalas de Serviço Ativas")
     matricula = st.session_state.get("login_usuario", "SEM_MATRICULA").upper()
     
-    with st.spinner("Construindo visualização criptografada com sua matrícula..."):
-        pdf_original = baixar_escala_original()
+    # Filtro para o Agente escolher qual das 3 escalas ele deseja visualizar
+    escala_selecionada_usuario = st.selectbox("Selecione a Escala que deseja consultar:", list(ESCALAS_DISPONIVEIS.keys()))
+    nome_arquivo_supabase = ESCALAS_DISPONIVEIS[escala_selecionada_usuario]
+    
+    with st.spinner(f"Buscando e aplicando marca d'água na escala {escala_selecionada_usuario}..."):
+        pdf_original = baixar_escala_original(nome_arquivo_supabase)
         if pdf_original is None:
-            st.warning("Nenhuma escala de serviço ativa encontrada no servidor.")
+            st.warning(f"Nenhuma escala de serviço ativa encontrada para o setor: **{escala_selecionada_usuario}**.")
             return
             
         pdf_com_marca = aplicar_marca_dagua(pdf_original, matricula)
@@ -493,14 +476,14 @@ def view_visualizar_escala_usuario():
         
         col_info, col_down = st.columns([3, 1])
         with col_info:
-            st.caption(f"Documento indexado para: **{st.session_state['nome_usuario']}** (Matrícula: `{matricula}`)")
+            st.caption(f"Documento do **{escala_selecionada_usuario}** indexado para: **{st.session_state['nome_usuario']}** (Matrícula: `{matricula}`)")
         with col_down:
             st.download_button(
                 label="📥 Exportar Escala com Marca d'Água",
                 data=pdf_com_marca,
-                file_name=f"Escala_Oficial_{matricula}.pdf",
+                file_name=f"Escala_{escala_selecionada_usuario.replace(' ', '_')}_{matricula}.pdf",
                 mime="application/pdf",
-                on_click=lambda: registrar_log(st.session_state["nome_usuario"], "DOWNLOAD_ESCALA", f"Matrícula: {matricula}")
+                on_click=lambda: registrar_log(st.session_state["nome_usuario"], "DOWNLOAD_ESCALA", f"{escala_selecionada_usuario} | Matrícula: {matricula}")
             )
             
         pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="850" type="application/pdf"></iframe>'
@@ -542,7 +525,7 @@ def view_alterar_senha_obrigatoria():
             st.error("As senhas inseridas diferem.")
         else:
             if alterar_senha_usuario_planilha(st.session_state["usuario_id"], nova_senha):
-                st.success("Senha atualizada! Redirecionando...")
+                st.success("Senha updated! Redirecionando...")
                 st.session_state["primeiro_acesso"] = False
                 time.sleep(1.5)
                 st.rerun()
