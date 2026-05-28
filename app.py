@@ -368,7 +368,7 @@ def baixar_escala_original(nome_arquivo_supabase):
 # INTERFACES VISUAIS (VIEWS ADMINISTRATIVAS - CRUD)
 # =====================================================
 def view_gerenciar_escala_admin():
-    aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escalas", "👥 Gerenciar Usuários (CRUD)"])
+    aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escalas", "👥 Gerenciar Usuários"])
     
     with aba_escala:
         st.subheader("⚙️ Publicação de Escalas por Período")
@@ -518,7 +518,7 @@ def view_visualizar_escala_usuario():
 def renderizar_tela_login():
     st.sidebar.title("🔐 Acesso Restrito")
     tipo = st.sidebar.selectbox("Função de Acesso", ["agente", "admin"])
-    login = st.sidebar.text_input("Matrícula / Usuário").strip()
+    login = st.sidebar.text_input("Matrícula").strip()
     senha = st.sidebar.text_input("Senha Corporativa", type="password")
     
     if st.sidebar.button("Entrar no Sistema"):
