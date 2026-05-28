@@ -18,7 +18,7 @@ from reportlab.pdfgen import canvas
 # CONFIGURAÇÃO INICIAL DO STREAMLIT
 # =====================================================
 st.set_page_config(
-    page_title="Gestão de Escalas - GCM",
+    page_title="Escalas - GCMCF",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -89,11 +89,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown(
-    '<div class="main-title">📅 Sistema de Distribuição Segura de Escalas | GCM</div>',
+    '<div class="main-title">📅 Sistema de Escalas | GCMCF</div>',
     unsafe_allow_html=True
 )
 st.markdown(
-    '<div class="sub-title">Download seguro de escalas com marca d\'água digital e rastreamento por auditoria.</div>',
+    '<div class="sub-title">Download seguro de escalas com marca d\'água digital.</div>',
     unsafe_allow_html=True
 )
 
