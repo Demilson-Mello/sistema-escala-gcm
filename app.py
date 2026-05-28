@@ -18,7 +18,7 @@ from reportlab.pdfgen import canvas
 # CONFIGURAÇÃO INICIAL DO STREAMLIT
 # =====================================================
 st.set_page_config(
-    page_title="Gestão de Escalas - GCM",
+    page_title="Escala de Serviço- GCMCF",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -77,11 +77,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown(
-    '<div class="main-title">📅 Sistema de Distribuição Segura de Escalas | GCM</div>',
+    '<div class="main-title">📅 Sistema de Escala de Serviço | GCMCF</div>',
     unsafe_allow_html=True
 )
 st.markdown(
-    '<div class="sub-title">Download seguro de escalas com marca d\'água digital e rastreamento por auditoria.</div>',
+    '<div class="sub-title">Download seguro de escalas com marca d\'água digital.</div>',
     unsafe_allow_html=True
 )
 
@@ -340,7 +340,7 @@ def baixar_escala_original(nome_arquivo_supabase):
 # INTERFACES VISUAIS (VIEWS ADMINISTRATIVAS - CRUD)
 # =====================================================
 def view_gerenciar_escala_admin():
-    aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escalas", "👥 Gerenciar Usuários (CRUD)"])
+    aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escalas", "👥 Gerenciar Usuários"])
     
     with aba_escala:
         st.subheader("⚙️ Publicação de Escalas por Período")
@@ -480,7 +480,7 @@ def view_visualizar_escala_usuario():
                 pdf_com_marca = aplicar_marca_dagua(pdf_original, matricula)
                 
                 st.download_button(
-                    label="📥 Baixar PDF Seguro",
+                    label="📥 Baixar PDF",
                     data=pdf_com_marca,
                     file_name=f"{nome_arquivo_target.replace('.pdf', '')}_{matricula}.pdf",
                     mime="application/pdf",
