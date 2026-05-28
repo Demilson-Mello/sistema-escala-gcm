@@ -296,7 +296,7 @@ def criar_pdf_marca_dagua(matricula):
     for i, y in enumerate(range(-400, 1200, 20)): 
         c.saveState()
         opacidade_atual = opacidades[i % len(opacidades)]
-        c.setFillColorRGB(0.8, 0, 0)
+        c.setFillColorRGB(0, 0, 0)
         c.setFillAlpha(opacidade_atual)
         c.setFont("Helvetica-Bold", 10)
         x_dinamico = -200 - (y * 0.4) + (i % 3 * 15)
@@ -308,7 +308,7 @@ def criar_pdf_marca_dagua(matricula):
     # Camada 2
     for i, y in enumerate(range(-400, 1200, 40)): 
         c.saveState()
-        c.setFillColorRGB(0.7, 0.1, 0.1)
+        c.setFillColorRGB(0.1, 0.1, 0.1)
         c.setFillAlpha(0.12)
         c.setFont("Helvetica-Bold", 9)
         x_dinamico = -100 + (y * 0.3)
