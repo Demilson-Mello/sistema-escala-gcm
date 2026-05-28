@@ -271,7 +271,7 @@ def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     
-    c.setFillColorRGB(1, 0, 0) 
+    c.setFillColorRGB(0, 0, 0) 
     c.setFillAlpha(0.25)
     c.setFont("Helvetica-Bold", 12)
     
