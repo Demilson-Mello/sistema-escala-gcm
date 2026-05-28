@@ -29,12 +29,29 @@ TZ = ZoneInfo("America/Sao_Paulo")
 # LÊ OS ID'S E CHAVES DIRETAMENTE DOS SECRETS DO STREAMLIT
 ID_PLANILHA_MASTER = st.secrets["ID_PLANILHA_MASTER"]
 
-# Dicionário mapeando as escalas para os nomes dos arquivos no Supabase
+# Listas auxiliares para seleção de data
+MESES = [
+    "Janeiro", "Fevereiro", "Março", "Abril",
+    "Maio", "Junho", "Julho", "Agosto",
+    "Setembro", "Outubro", "Novembro", "Dezembro"
+]
+
+# Gera uma lista de anos (ano atual, anterior e próximos)
+ANO_ATUAL = datetime.now(TZ).year
+ANOS = [str(ano) for ano in range(ANO_ATUAL - 1, ANO_ATUAL + 3)]
+
+# Dicionário base mapeando os prefixos das escalas
 ESCALAS_DISPONIVEIS = {
-    "1º Distrito": "escala_1_distrito.pdf",
-    "2º Distrito": "escala_2_distrito.pdf",
-    "Marítima e Ambiental": "escala_maritima_ambiental.pdf"
+    "1º Distrito": "escala_1_distrito",
+    "2º Distrito": "escala_2_distrito",
+    "Marítima e Ambiental": "escala_maritima_ambiental"
 }
+
+# Função auxiliar para gerar o nome do arquivo com o mês por extenso
+def gerar_nome_arquivo(prefixo_escala, nome_mes, ano):
+    # Remove acentos/caracteres especiais do mês para evitar problemas em URLs ou servidores (Ex: Março -> marco)
+    mes_limpo = nome_mes.lower().replace("ç", "c")
+    return f"{prefixo_escala}_{mes_limpo}_{ano}.pdf"
 
 # =====================================================
 # CSS PERSONALIZADO DA INTERFACE
@@ -325,22 +342,31 @@ def view_gerenciar_escala_admin():
     
     # --- SUB-ABA 1: PUBLICAÇÃO DE ESCALAS ---
     with aba_escala:
-        st.subheader("⚙️ Publicação e Atualização de Escalas Específicas")
-        st.info("Selecione o grupamento/distrito correto, carregue o arquivo em PDF e publique.")
+        st.subheader("⚙️ Publicação de Escalas por Período (Mês por Extenso)")
+        st.info("Defina o setor, o mês/ano correspondente, faça o upload do PDF e publique.")
         
-        # Caixa de seleção da escala que o administrador deseja atualizar
-        escala_selecionada_admin = st.selectbox("Selecione qual Escala deseja Publicar/Atualizar:", list(ESCALAS_DISPONIVEIS.keys()))
-        nome_arquivo_supabase = ESCALAS_DISPONIVEIS[escala_selecionada_admin]
+        # Seleção dos parâmetros do arquivo
+        col_escala, col_mes, col_ano = st.columns(3)
+        with col_escala:
+            escala_selecionada_admin = st.selectbox("Selecione a Escala:", list(ESCALAS_DISPONIVEIS.keys()))
+        with col_mes:
+            mes_selecionado_admin = st.selectbox("Mês de Referência:", MESES)
+        with col_ano:
+            ano_selecionado_admin = st.selectbox("Ano de Referência:", ANOS, index=1)
+            
+        # Gera o nome dinâmico para salvar no Supabase (Ex: escala_1_distrito_maio_2026.pdf)
+        prefixo = ESCALAS_DISPONIVEIS[escala_selecionada_admin]
+        nome_arquivo_supabase = gerar_nome_arquivo(prefixo, mes_selecionado_admin, ano_selecionado_admin)
         
-        arquivo_escala = st.file_uploader(f"Upload da {escala_selecionada_admin} (PDF)", type=["pdf"], key="uploader_admin")
+        arquivo_escala = st.file_uploader(f"Upload do arquivo para: {nome_arquivo_supabase}", type=["pdf"], key="uploader_admin")
         
         if st.button("Publicar Escala Oficial"):
             if arquivo_escala:
-                with st.spinner(f"Gravando arquivo da escala '{escala_selecionada_admin}' no servidor seguro..."):
+                with st.spinner(f"Gravando '{nome_arquivo_supabase}' no servidor seguro..."):
                     bytes_pdf = arquivo_escala.read()
                     if fazer_upload_escala(bytes_pdf, nome_arquivo_supabase):
-                        st.success(f"Escala oficial do **{escala_selecionada_admin}** publicada com sucesso!")
-                        registrar_log(st.session_state["nome_usuario"], "UPLOAD_ESCALA", f"{escala_selecionada_admin} - {arquivo_escala.name}")
+                        st.success(f"Escala **{escala_selecionada_admin}** de **{mes_selecionado_admin}/{ano_selecionado_admin}** publicada com sucesso!")
+                        registrar_log(st.session_state["nome_usuario"], "UPLOAD_ESCALA", f"{nome_arquivo_supabase}")
             else:
                 st.warning("Selecione um documento em formato PDF antes de enviar.")
 
@@ -458,17 +484,26 @@ def view_gerenciar_escala_admin():
 # INTERFACE DO AGENTE (VISUALIZAÇÃO COM MARCA D'ÁGUA)
 # =====================================================
 def view_visualizar_escala_usuario():
-    st.subheader("📅 Consulta de Escalas de Serviço Ativas")
+    st.subheader("📅 Consulta de Escalas de Serviço")
     matricula = st.session_state.get("login_usuario", "SEM_MATRICULA").upper()
     
-    # Filtro para o Agente escolher qual das 3 escalas ele deseja visualizar
-    escala_selecionada_usuario = st.selectbox("Selecione a Escala que deseja consultar:", list(ESCALAS_DISPONIVEIS.keys()))
-    nome_arquivo_supabase = ESCALAS_DISPONIVEIS[escala_selecionada_usuario]
+    # Filtros para o Agente encontrar a escala desejada
+    col_escala, col_mes, col_ano = st.columns(3)
+    with col_escala:
+        escala_selecionada_usuario = st.selectbox("Selecione a Escala:", list(ESCALAS_DISPONIVEIS.keys()))
+    with col_mes:
+        mes_selecionado_usuario = st.selectbox("Mês Desejado:", MESES)
+    with col_ano:
+        ano_selecionado_usuario = st.selectbox("Ano Desejado:", ANOS, index=1)
+
+    # Gera o nome exato do arquivo para buscar no Supabase
+    prefixo = ESCALAS_DISPONIVEIS[escala_selecionada_usuario]
+    nome_arquivo_supabase = gerar_nome_arquivo(prefixo, mes_selecionado_usuario, ano_selecionado_usuario)
     
-    with st.spinner(f"Buscando e aplicando marca d'água na escala {escala_selecionada_usuario}..."):
+    with st.spinner(f"Buscando arquivo '{nome_arquivo_supabase}'..."):
         pdf_original = baixar_escala_original(nome_arquivo_supabase)
         if pdf_original is None:
-            st.warning(f"Nenhuma escala de serviço ativa encontrada para o setor: **{escala_selecionada_usuario}**.")
+            st.warning(f"Nenhuma escala encontrada para: **{escala_selecionada_usuario}** referente a **{mes_selecionado_usuario}/{ano_selecionado_usuario}**.")
             return
             
         pdf_com_marca = aplicar_marca_dagua(pdf_original, matricula)
@@ -476,14 +511,14 @@ def view_visualizar_escala_usuario():
         
         col_info, col_down = st.columns([3, 1])
         with col_info:
-            st.caption(f"Documento do **{escala_selecionada_usuario}** indexado para: **{st.session_state['nome_usuario']}** (Matrícula: `{matricula}`)")
+            st.caption(f"Documento indexado e auditado para: **{st.session_state['nome_usuario']}** (Matrícula: `{matricula}`)")
         with col_down:
             st.download_button(
                 label="📥 Exportar Escala com Marca d'Água",
                 data=pdf_com_marca,
-                file_name=f"Escala_{escala_selecionada_usuario.replace(' ', '_')}_{matricula}.pdf",
+                file_name=f"{nome_arquivo_supabase.replace('.pdf', '')}_{matricula}.pdf",
                 mime="application/pdf",
-                on_click=lambda: registrar_log(st.session_state["nome_usuario"], "DOWNLOAD_ESCALA", f"{escala_selecionada_usuario} | Matrícula: {matricula}")
+                on_click=lambda: registrar_log(st.session_state["nome_usuario"], "DOWNLOAD_ESCALA", f"{nome_arquivo_supabase} | Matrícula: {matricula}")
             )
             
         pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="850" type="application/pdf"></iframe>'
@@ -525,7 +560,7 @@ def view_alterar_senha_obrigatoria():
             st.error("As senhas inseridas diferem.")
         else:
             if alterar_senha_usuario_planilha(st.session_state["usuario_id"], nova_senha):
-                st.success("Senha updated! Redirecionando...")
+                st.success("Senha atualizada! Redirecionando...")
                 st.session_state["primeiro_acesso"] = False
                 time.sleep(1.5)
                 st.rerun()
