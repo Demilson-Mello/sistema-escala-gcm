@@ -305,7 +305,7 @@ def criar_pdf_marca_dagua(matricula):
     # Diminuímos o passo de 70 para 40 para adensar também o cruzamento contra-IA
     for i, y in enumerate(range(-400, 1200, 40)): 
         c.saveState()
-        c.setFillColorRGB(0.7, 0.1, 0.1)
+        c.setFillColorRGB(0.1, 0.1, 0.1)
         c.setFillAlpha(0.12)
         c.setFont("Helvetica-Bold", 9)
         
