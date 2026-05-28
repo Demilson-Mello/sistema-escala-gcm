@@ -278,7 +278,7 @@ def criar_pdf_marca_dagua(matricula):
     c = canvas.Canvas(buffer, pagesize=A4)
     c.setFillColorRGB(0, 0, 0) 
     c.setFillAlpha(0.25)
-    c.setFont("Helvetica-Bold", 12)
+    c.setFont("Helvetica-Bold", 10)
     
     linha_texto = "  ".join([f"{matricula}"] * 40)
     for y in range(-400, 1100, 25): 
