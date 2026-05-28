@@ -289,7 +289,7 @@ def criar_pdf_marca_dagua(matricula):
         c.saveState()
         opacidade_atual = opacidades[i % len(opacidades)]
         
-        c.setFillColorRGB(0.8, 0, 0) # Vermelho de segurança
+        c.setFillColorRGB(0, 0, 0) # Vermelho de segurança
         c.setFillAlpha(opacidade_atual)
         c.setFont("Helvetica-Bold", 10) # Tamanho levemente menor para caber mais texto sem borrar
         
