@@ -276,16 +276,41 @@ def alterar_senha_usuario_planilha(id_usuario, nova_senha):
 def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    c.setFillColorRGB(0, 0, 0) 
-    c.setFillAlpha(0.25)
-    c.setFont("Helvetica-Bold", 10)
     
-    linha_texto = "  ".join([f"{matricula}"] * 40)
-    for y in range(-400, 1100, 25): 
+    # Lista de opacidades para flutuar e quebrar o padrão geométrico que a IA procura
+    opacidades = [0.15, 0.22, 0.28, 0.18]
+    
+    # Linha longa repetindo a matrícula do agente
+    linha_texto = "  ".join([f"{matricula}"] * 35)
+    
+    # CAMADA 1: Linhas inclinadas para a direita (35 graus)
+    for i, y in enumerate(range(-400, 1200, 35)): 
         c.saveState()
-        x_dinamico = -200 - (y * 0.5)
+        # Aplica uma opacidade semi-aleatória baseada na linha para confundir o Inpaint da IA
+        opacidade_atual = opacidades[i % len(opacidades)]
+        
+        c.setFillColorRGB(0.8, 0, 0) # Vermelho de segurança
+        c.setFillAlpha(opacidade_atual)
+        c.setFont("Helvetica-Bold", 11)
+        
+        # Deslocamento horizontal dinâmico para que as letras não fiquem alinhadas perfeitamente em coluna
+        x_dinamico = -150 - (y * 0.4) + (i % 3 * 20)
+        
         c.translate(x_dinamico, y) 
         c.rotate(35)
+        c.drawString(0, 0, linha_texto)
+        c.restoreState()
+        
+    # CAMADA 2: Cruzamento Inverso (Linhas a -35 graus) - Cria uma rede sobre o texto da escala
+    for i, y in enumerate(range(-400, 1200, 70)): # Passo maior para não poluir demais, mas travar a IA
+        c.saveState()
+        c.setFillColorRGB(0.7, 0.1, 0.1)
+        c.setFillAlpha(0.13) # Mais sutil
+        c.setFont("Helvetica-Bold", 10)
+        
+        x_dinamico = -50 + (y * 0.3)
+        c.translate(x_dinamico, y)
+        c.rotate(-35)
         c.drawString(0, 0, linha_texto)
         c.restoreState()
             
