@@ -1,13 +1,10 @@
 import streamlit as st
-import gspread
 import pandas as pd
 from zoneinfo import ZoneInfo
-from google.oauth2.service_account import Credentials
 from supabase import create_client
 from datetime import datetime
 import hashlib
 import time
-import base64
 from io import BytesIO
 
 from pypdf import PdfReader, PdfWriter
@@ -23,31 +20,23 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Constante de fuso horário
 TZ = ZoneInfo("America/Sao_Paulo")
 
-# LÊ OS ID'S E CHAVES DIRETAMENTE DOS SECRETS DO STREAMLIT
-ID_PLANILHA_MASTER = st.secrets["ID_PLANILHA_MASTER"]
-
-# Listas auxiliares para seleção de data
 MESES = [
     "Janeiro", "Fevereiro", "Março", "Abril",
     "Maio", "Junho", "Julho", "Agosto",
     "Setembro", "Outubro", "Novembro", "Dezembro"
 ]
 
-# Gera uma lista de anos (ano atual, anterior e próximos)
 ANO_ATUAL = datetime.now(TZ).year
 ANOS = [str(ano) for ano in range(ANO_ATUAL - 1, ANO_ATUAL + 3)]
 
-# Dicionário base mapeando os prefixos das escalas
 ESCALAS_DISPONIVEIS = {
     "1º Distrito": "escala_1_distrito",
     "2º Distrito": "escala_2_distrito",
     "Marítima e Ambiental": "escala_maritima_ambiental"
 }
 
-# Função auxiliar para gerar o nome do arquivo com o mês por extenso
 def gerar_nome_arquivo(prefixo_escala, nome_mes, ano):
     mes_limpo = nome_mes.lower().replace("ç", "c")
     return f"{prefixo_escala}_{mes_limpo}_{ano}.pdf"
@@ -88,23 +77,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown(
-    '<div class="main-title">📅 Sistema de Escalas | GCMCF</div>',
-    unsafe_allow_html=True
-)
-st.markdown(
-    '<div class="sub-title">Download seguro de escalas com marca d\'água digital.</div>',
-    unsafe_allow_html=True
-)
+st.markdown('<div class="main-title">📅 Sistema de Escalas | GCMCF</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Download seguro de escalas com marca d\'água digital e banco de dados Supabase.</div>', unsafe_allow_html=True)
 
 # =====================================================
 # FUNÇÕES DE SEGURANÇA E SESSÃO
 # =====================================================
 def make_hashes(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
+    return hashlib.sha256(str.encode(password.strip())).hexdigest()
 
 def check_hashes(password, hashed_text):
-    return make_hashes(password) == hashed_text
+    return make_hashes(password) == hashed_text.strip()
 
 def init_session():
     valores_padrao = {
@@ -128,159 +111,131 @@ def logout():
     st.rerun()
 
 # =====================================================
-# CONEXÃO COM GOOGLE SHEETS (SISTEMA DE USUÁRIOS)
+# CONEXÃO COM SUPABASE
 # =====================================================
-def conectar_planilha():
-    try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets"]
-        creds = Credentials.from_service_account_info(
-            st.secrets["google_service_account"],
-            scopes=scope
-        )
-        client = gspread.authorize(creds)
-        planilha = client.open_by_key(ID_PLANILHA_MASTER)
-        return planilha
-    except Exception as e:
-        st.error(f"Erro ao conectar com o Google Sheets: {e}")
-        st.stop()
-
-try:
-    planilha_master = conectar_planilha()
-except:
-    st.stop()
-
-# =====================================================
-# CONEXÃO COM SUPABASE STORAGE
-# =====================================================
+@st.cache_resource
 def conectar_supabase():
     try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
+        if "SUPABASE_URL" not in st.secrets or "SUPABASE_KEY" not in st.secrets:
+            st.error("⚠️ Erro Crítico: As credenciais do Supabase não foram configuradas nos Secrets do Streamlit.")
+            return None
+        url = st.secrets["SUPABASE_URL"].strip()
+        key = st.secrets["SUPABASE_KEY"].strip()
         return create_client(url, key)
     except Exception as e:
         st.error(f"Erro nas credenciais do Supabase: {e}")
         return None
 
-# =====================================================
-# GERENCIAMENTO AUTOMÁTICO DE ABAS DO SISTEMA
-# =====================================================
-def conectar_aba_usuarios():
-    try:
-        aba = planilha_master.worksheet("usuarios")
-    except Exception:
-        aba = planilha_master.add_worksheet(title="usuarios", rows=2000, cols=10)
-        aba.append_row(["id", "tipo_usuario", "login", "nome", "senha", "primeiro_acesso", "status"])
-
-    try:
-        registros = aba.get_all_records()
-        df = pd.DataFrame(registros)
-        if df.empty or "login" not in df.columns:
-            senha_hash = make_hashes("admin123")
-            aba.append_row([1, "admin", "admin", "ADMINISTRADOR", senha_hash, 1, "ATIVO"])
-        else:
-            df.columns = df.columns.str.strip().str.lower()
-            admin_existe = not df[
-                (df["tipo_usuario"].astype(str).str.lower() == "admin") &
-                (df["login"].astype(str).str.lower() == "admin") &
-                (df["status"].astype(str).str.upper() == "ATIVO")
-            ].empty
-            if not admin_existe:
-                ids = pd.to_numeric(df["id"], errors="coerce").dropna()
-                novo_id = int(ids.max()) + 1 if not ids.empty else 1
-                senha_hash = make_hashes("admin123")
-                aba.append_row([novo_id, "admin", "admin", "ADMINISTRADOR", senha_hash, 1, "ATIVO"])
-    except Exception:
-        pass
-    return aba
-
-def conectar_aba_log():
-    try:
-        return planilha_master.worksheet("log_auditoria")
-    except Exception:
-        nova_aba = planilha_master.add_worksheet(title="log_auditoria", rows=5000, cols=5)
-        nova_aba.append_row(["data", "hora", "usuario", "acao", "detalhes"])
-        return nova_aba
-
-usuarios_sheet = conectar_aba_usuarios()
-log_sheet = conectar_aba_log()
+supabase = conectar_supabase()
 
 # =====================================================
-# LEITURA DE DADOS E LOGS (CACHE ATIVO)
+# LEITURA DE DADOS E LOGS VIA SUPABASE
 # =====================================================
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=5)
 def carregar_usuarios():
-    dados = usuarios_sheet.get_all_records()
-    df = pd.DataFrame(dados)
-    if not df.empty:
-        df.columns = df.columns.str.strip().str.lower()
-        for col in ["id", "primeiro_acesso"]:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
+    if not supabase:
+        return pd.DataFrame()
+    try:
+        resposta = supabase.table("usuarios").select("*").order("id").execute()
+        return pd.DataFrame(resposta.data)
+    except Exception as e:
+        st.error(f"Erro ao carregar usuários: {e}")
+        return pd.DataFrame()
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=5)
 def carregar_logs():
-    dados = log_sheet.get_all_records()
-    df = pd.DataFrame(dados)
-    if not df.empty:
-        df.columns = df.columns.str.strip().str.lower()
-    return df
+    if not supabase:
+        return pd.DataFrame()
+    try:
+        resposta = supabase.table("log_auditoria").select("*").order("id", desc=True).execute()
+        return pd.DataFrame(resposta.data)
+    except Exception as e:
+        st.error(f"Erro ao carregar logs: {e}")
+        return pd.DataFrame()
 
 def registrar_log(usuario, acao, detalhes=""):
+    if not supabase:
+        return
     agora = datetime.now(TZ)
-    log_sheet.append_row([
-        agora.strftime("%d/%m/%Y"),
-        agora.strftime("%H:%M:%S"),
-        str(usuario).upper(),
-        str(acao).upper(),
-        str(detalhes).upper()
-    ])
-    carregar_logs.clear()
+    try:
+        supabase.table("log_auditoria").insert({
+            "data": agora.strftime("%d/%m/%Y"),
+            "hora": agora.strftime("%H:%M:%S"),
+            "usuario": str(usuario).strip().upper(),
+            "acao": str(acao).strip().upper(),
+            "detalhes": str(detalhes).strip().upper()
+        }).execute()
+        carregar_logs.clear()
+    except Exception as e:
+        st.error(f"Falha ao registrar log no banco de dados: {e}")
 
 # =====================================================
-# OPERAÇÕES DE USUÁRIOS
+# OPERAÇÕES DE USUÁRIOS (LOGICA DE LOGIN REVISADA)
 # =====================================================
-def localizar_linha_usuario_por_id(id_usuario):
-    df = carregar_usuarios()
-    if df.empty: return None, None
-    df = df.copy()
-    df["id"] = pd.to_numeric(df["id"], errors="coerce")
-    resultado = df[df["id"] == int(id_usuario)]
-    if resultado.empty: return None, None
-    return resultado.index[0] + 2, resultado.iloc[0]
+def login_usuario_supabase(tipo_usuario, login, senha):
+    if not supabase:
+        return {"sucesso": False, "erro": "Sem conexão com o banco"}
+    
+    try:
+        login_limpo = str(login).strip()
+        tipo_limpo = str(tipo_usuario).strip().lower()
+        
+        # Busca traz apenas o login para evitar conflitos de múltiplos filtros no Postgres
+        resposta = supabase.table("usuarios").select("*").eq("login", login_limpo).execute()
+        
+        if not resposta.data:
+            return {"sucesso": False, "erro": f"Usuário com o login '{login_limpo}' não foi encontrado no banco."}
+        
+        user = resposta.data[0]
+        
+        # Validações granulares feitas no lado do Python (mais seguro e rastreável)
+        if str(user.get("status")).strip().upper() != "ATIVO":
+            return {"sucesso": False, "erro": "Usuário encontrado, mas o status não está como 'ATIVO'."}
+            
+        if str(user.get("tipo_usuario")).strip().lower() != tipo_limpo:
+            return {"sucesso": False, "erro": f"Usuário encontrado, mas o perfil no banco é '{user.get('tipo_usuario')}' e você selecionou '{tipo_limpo}'."}
+            
+        # Validação de Hash de Senha
+        if not check_hashes(senha, str(user["senha"])):
+            return {
+                "sucesso": False, 
+                "erro": f"Senha incorreta. O sistema gerou o hash '{make_hashes(senha)}', mas no banco está salvo '{user['senha']}'."
+            }
+        
+        # Se passou em tudo, define o primeiro acesso
+        p_acesso_valor = user.get("primeiro_acesso", 1)
+        primeiro_acesso_bool = True if str(p_acesso_valor) == "1" else False
 
-def buscar_usuario_login(tipo_usuario, login):
-    df = carregar_usuarios()
-    if df.empty: return None
-    filtros = (
-        (df["tipo_usuario"].astype(str).str.strip().str.lower() == str(tipo_usuario).strip().lower()) &
-        (df["login"].astype(str).str.strip().str.lower() == str(login).strip().lower()) &
-        (df["status"].astype(str).str.strip().str.upper() == "ATIVO")
-    )
-    resultado = df[filtros]
-    if resultado.empty: return None
-    return resultado.iloc[0]
-
-def login_usuario_planilha(tipo_usuario, login, senha):
-    user = buscar_usuario_login(tipo_usuario, login)
-    if user is not None and check_hashes(senha, str(user["senha"])):
-        primeiro_acesso_val = user.get("primeiro_acesso", 0)
-        try: primeiro_acesso_bool = bool(int(primeiro_acesso_val))
-        except Exception: primeiro_acesso_bool = False
         return {
-            "sucesso": True, "id": int(user["id"]), "nome": str(user["nome"]),
-            "login": str(user["login"]), "primeiro_acesso": primeiro_acesso_bool
+            "sucesso": True, 
+            "id": int(user["id"]), 
+            "nome": str(user["nome"]).strip(),
+            "login": str(user["login"]).strip(), 
+            "primeiro_acesso": primeiro_acesso_bool
         }
-    return {"sucesso": False, "id": None, "nome": None, "login": None, "primeiro_acesso": None}
+        
+    except Exception as e:
+        return {"sucesso": False, "erro": f"Erro interno na execução da query: {e}"}
 
-def alterar_senha_usuario_planilha(id_usuario, nova_senha):
-    linha, user = localizar_linha_usuario_por_id(id_usuario)
-    if linha is None: return False
-    nova_senha_hash = make_hashes(nova_senha)
-    usuarios_sheet.update(f"E{linha}:F{linha}", [[nova_senha_hash, 0]])
-    registrar_log(user.get("nome", "USUARIO"), "ALTERACAO_SENHA", f"ID_USUARIO {id_usuario}")
-    carregar_usuarios.clear()
-    return True
+def alterar_senha_usuario_supabase(id_usuario, nova_senha):
+    if not supabase:
+        return False
+    try:
+        nova_senha_hash = make_hashes(nova_senha)
+        resposta = supabase.table("usuarios").update({
+            "senha": nova_senha_hash,
+            "primeiro_acesso": 0
+        }).eq("id", id_usuario).execute()
+        
+        if resposta.data:
+            user = resposta.data[0]
+            registrar_log(user.get("nome", "USUARIO"), "ALTERACAO_SENHA", f"ID_USUARIO {id_usuario}")
+            carregar_usuarios.clear()
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Erro ao alterar senha: {e}")
+        return False
 
 # =====================================================
 # MOTOR DE MARCA D'ÁGUA ULTRA-DENSO ANTI-IA
@@ -288,11 +243,9 @@ def alterar_senha_usuario_planilha(id_usuario, nova_senha):
 def criar_pdf_marca_dagua(matricula):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    
     opacidades = [0.15, 0.22, 0.28, 0.18]
     linha_texto = "  ".join([f"{matricula}"] * 50)
     
-    # Camada 1
     for i, y in enumerate(range(-400, 1200, 20)): 
         c.saveState()
         opacidade_atual = opacidades[i % len(opacidades)]
@@ -305,7 +258,6 @@ def criar_pdf_marca_dagua(matricula):
         c.drawString(0, 0, linha_texto)
         c.restoreState()
         
-    # Camada 2
     for i, y in enumerate(range(-400, 1200, 40)): 
         c.saveState()
         c.setFillColorRGB(0.1, 0.1, 0.1)
@@ -323,27 +275,30 @@ def criar_pdf_marca_dagua(matricula):
     return buffer
 
 def aplicar_marca_dagua(pdf_original_bytes, matricula):
-    pdf_original = PdfReader(BytesIO(pdf_original_bytes))
-    pdf_marca = PdfReader(criar_pdf_marca_dagua(matricula))
-    
-    escritor_pdf = PdfWriter()
-    pagina_marca = pdf_marca.pages[0]
-    
-    for pagina in pdf_original.pages:
-        pagina.merge_page(pagina_marca)
-        escritor_pdf.add_page(pagina)
+    try:
+        pdf_original = PdfReader(BytesIO(pdf_original_bytes))
+        pdf_marca = PdfReader(criar_pdf_marca_dagua(matricula))
+        escritor_pdf = PdfWriter()
+        pagina_marca = pdf_marca.pages[0]
         
-    buffer_saida = BytesIO()
-    escritor_pdf.write(buffer_saida)
-    buffer_saida.seek(0)
-    return buffer_saida.getvalue()
+        for pagina in pdf_original.pages:
+            pagina.merge_page(pagina_marca)
+            escritor_pdf.add_page(pagina)
+            
+        buffer_saida = BytesIO()
+        escritor_pdf.write(buffer_saida)
+        buffer_saida.seek(0)
+        return buffer_saida.getvalue()
+    except Exception as e:
+        st.error(f"Erro ao processar marca d'água no PDF: {e}")
+        return pdf_original_bytes
 
 # =====================================================
 # ENGINE DE COMUNICAÇÃO (SUPABASE STORAGE)
 # =====================================================
 def fazer_upload_escala(arquivo_bytes, nome_arquivo_supabase):
-    supabase = conectar_supabase()
-    if not supabase: return False
+    if not supabase: 
+        return False
     try:
         supabase.storage.from_("escalas").upload(
             path=nome_arquivo_supabase,
@@ -356,8 +311,8 @@ def fazer_upload_escala(arquivo_bytes, nome_arquivo_supabase):
         return False
 
 def baixar_escala_original(nome_arquivo_supabase):
-    supabase = conectar_supabase()
-    if not supabase: return None
+    if not supabase: 
+        return None
     try:
         dados = supabase.storage.from_("escalas").download(nome_arquivo_supabase)
         return dados
@@ -365,7 +320,7 @@ def baixar_escala_original(nome_arquivo_supabase):
         return None
 
 # =====================================================
-# INTERFACES VISUAIS (VIEWS ADMINISTRATIVAS - CRUD)
+# INTERFACES VISUAIS (VIEWS ADMINISTRATIVAS)
 # =====================================================
 def view_gerenciar_escala_admin():
     aba_escala, aba_usuarios = st.tabs(["📅 Publicar Escalas", "👥 Gerenciar Usuários"])
@@ -380,13 +335,15 @@ def view_gerenciar_escala_admin():
         with col_ano:
             ano_selecionado_admin = st.selectbox("Ano de Referência:", ANOS, index=1)
             
-        prefixo = ESCALAS_DISPONIVEIS[escala_selecionada_admin]
-        nome_arquivo_supabase = gerar_nome_arquivo(prefixo, mes_selecionado_admin, ano_selecionado_admin)
+        prefix = ESCALAS_DISPONIVEIS[escala_selecionada_admin]
+        nome_arquivo_supabase = gerar_nome_arquivo(prefix, mes_selecionado_admin, ano_selecionado_admin)
         
         arquivo_escala = st.file_uploader(f"Upload do arquivo para: {nome_arquivo_supabase}", type=["pdf"], key="uploader_admin")
         
         if st.button("Publicar Escala Oficial"):
-            if arquivo_escala:
+            if not supabase:
+                st.error("Banco de dados indisponível.")
+            elif arquivo_escala:
                 with st.spinner(f"Gravando '{nome_arquivo_supabase}'..."):
                     bytes_pdf = arquivo_escala.read()
                     if fazer_upload_escala(bytes_pdf, nome_arquivo_supabase):
@@ -401,7 +358,6 @@ def view_gerenciar_escala_admin():
         if df_users.empty:
             df_users = pd.DataFrame(columns=["id", "tipo_usuario", "login", "nome", "senha", "primeiro_acesso", "status"])
         
-        df_users["id"] = pd.to_numeric(df_users["id"], errors="coerce").fillna(0).astype(int)
         col_cadastro, col_lista = st.columns([1, 2])
         
         with col_cadastro:
@@ -414,16 +370,27 @@ def view_gerenciar_escala_admin():
                 botao_cadastrar = st.form_submit_button("Salvar Usuário")
                 
                 if botao_cadastrar:
-                    if not novo_nome or not nova_matricula:
+                    if not supabase:
+                        st.error("Banco de dados indisponível.")
+                    elif not novo_nome or not nova_matricula:
                         st.error("Campos obrigatórios vazios.")
-                    elif nova_matricula in df_users["login"].astype(str).values:
+                    elif str(nova_matricula).strip() in df_users["login"].astype(str).str.strip().values:
                         st.error("⚠️ Matrícula já cadastrada.")
                     else:
-                        proximo_id = int(df_users["id"].max()) + 1 if not df_users.empty else 1
-                        usuarios_sheet.append_row([proximo_id, tipo_func, nova_matricula, novo_nome, make_hashes(senha_padrao), 1, "ATIVO"])
-                        st.success(f"✅ {novo_nome} cadastrado!")
-                        carregar_usuarios.clear()
-                        st.rerun()
+                        try:
+                            supabase.table("usuarios").insert({
+                                "tipo_usuario": tipo_func,
+                                "login": nova_matricula.strip(),
+                                "nome": novo_nome.strip(),
+                                "senha": make_hashes(senha_padrao),
+                                "primeiro_acesso": 1,
+                                "status": "ATIVO"
+                            }).execute()
+                            st.success(f"✅ {novo_nome} cadastrado!")
+                            carregar_usuarios.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao salvar usuário no banco: {e}")
                         
         with col_lista:
             st.markdown("### 📝 Usuários Cadastrados")
@@ -434,41 +401,51 @@ def view_gerenciar_escala_admin():
             
             if usuario_selecionado != "-- Selecione um usuário para gerenciar --":
                 id_selecionado = int(usuario_selecionado.split("ID ")[1].split(" |")[0])
-                linha_planilha, dados_user = localizar_linha_usuario_por_id(id_selecionado)
+                dados_user = df_users[df_users["id"] == id_selecionado].iloc[0]
                 
-                if linha_planilha:
-                    with st.form("form_edicao_usuario"):
-                        edit_nome = st.text_input("Alterar Nome Funcional", value=str(dados_user['nome'])).strip().upper()
-                        edit_login = st.text_input("Alterar Matrícula / Login", value=str(dados_user['login'])).strip()
-                        edit_tipo = st.selectbox("Alterar Perfil", ["agente", "admin"], index=0 if dados_user['tipo_usuario'] == "agente" else 1)
-                        edit_status = st.selectbox("Status da Conta", ["ATIVO", "INATIVO"], index=0 if str(dados_user['status']).upper() == "ATIVO" else 1)
-                        col_btn1, col_btn2 = st.columns(2)
-                        with col_btn1: salvar_edicao = st.form_submit_button("💾 Salvar Alterações")
-                        with col_btn2: forcar_reset = st.form_submit_button("🔄 Redefinir Senha (1234)")
-                    
-                    if salvar_edicao:
-                        usuarios_sheet.update(f"B{linha_planilha}:D{linha_planilha}", [[edit_tipo, edit_login, edit_nome]])
-                        usuarios_sheet.update(f"G{linha_planilha}", [[edit_status]])
-                        st.success("Dados alterados!")
+                with st.form("form_edicao_usuario"):
+                    edit_nome = st.text_input("Alterar Nome Funcional", value=str(dados_user['nome'])).strip().upper()
+                    edit_login = st.text_input("Alterar Matrícula / Login", value=str(dados_user['login'])).strip()
+                    edit_tipo = st.selectbox("Alterar Perfil", ["agente", "admin"], index=0 if dados_user['tipo_usuario'] == "agente" else 1)
+                    edit_status = st.selectbox("Status da Conta", ["ATIVO", "INATIVO"], index=0 if str(dados_user['status']).upper() == "ATIVO" else 1)
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1: salvar_edicao = st.form_submit_button("💾 Salvar Alterações")
+                    with col_btn2: forcar_reset = st.form_submit_button("🔄 Redefinir Senha (1234)")
+                
+                if salvar_edicao and supabase:
+                    try:
+                        supabase.table("usuarios").update({
+                            "nome": edit_nome.strip(),
+                            "login": edit_login.strip(),
+                            "tipo_usuario": edit_tipo,
+                            "status": edit_status
+                        }).eq("id", id_selecionado).execute()
+                        st.success("Dados alterados com sucesso!")
                         carregar_usuarios.clear()
                         st.rerun()
-                            
-                    if forcar_reset:
-                        usuarios_sheet.update(f"E{linha_planilha}:F{linha_planilha}", [[make_hashes("1234"), 1]])
-                        st.success("Senha resetada para '1234'!")
+                    except Exception as e:
+                        st.error(f"Erro ao atualizar dados: {e}")
+                        
+                if forcar_reset and supabase:
+                    try:
+                        supabase.table("usuarios").update({
+                            "senha": make_hashes("1234"),
+                            "primeiro_acesso": 1
+                        }).eq("id", id_selecionado).execute()
+                        st.success("Senha resetada para '1234' com sucesso!")
                         carregar_usuarios.clear()
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao resetar senha: {e}")
 
 # =====================================================
-# INTERFACE DO AGENTE (COM TÍTULOS RESPECTIVOS)
+# INTERFACE DO AGENTE
 # =====================================================
 def view_visualizar_escala_usuario():
     st.subheader("📥 Central de Downloads - Escalas de Serviço")
     st.info("Selecione o mês e o ano abaixo para listar as escalas disponíveis para download.")
     
     matricula = st.session_state.get("login_usuario", "SEM_MATRICULA").upper()
-    
-    # Filtro de Período
     col_mes, col_ano = st.columns(2)
     with col_mes:
         mes_desejado = st.selectbox("Filtrar por Mês:", MESES)
@@ -477,11 +454,9 @@ def view_visualizar_escala_usuario():
         
     st.markdown("---")
     
-    # Renderiza a lista de escalas formatada com títulos respetivos
     for nome_exibicao, prefixo in ESCALAS_DISPONIVEIS.items():
         nome_arquivo_target = gerar_nome_arquivo(prefixo, mes_desejado, ano_desejado)
         
-        # Bloco visual empacotado via HTML/CSS
         st.markdown(f"""
         <div class="escala-container">
             <div class="escala-titulo">📋 Escala do {nome_exibicao}</div>
@@ -489,7 +464,6 @@ def view_visualizar_escala_usuario():
         </div>
         """, unsafe_allow_html=True)
         
-        # Botão posicionado logo abaixo do bloco de informações respetivo
         file_key = f"btn_{prefixo}_{mes_desejado}_{ano_desejado}"
         pdf_original = baixar_escala_original(nome_arquivo_target)
         
@@ -501,15 +475,11 @@ def view_visualizar_escala_usuario():
                 file_name=f"{nome_arquivo_target.replace('.pdf', '')}_{matricula}.pdf",
                 mime="application/pdf",
                 key=file_key,
-                on_click=lambda f=nome_arquivo_target: registrar_log(
-                    st.session_state["nome_usuario"], 
-                    "DOWNLOAD_ESCALA", 
-                    f"{f} | Matrícula: {matricula}"
-                )
+                on_click=registrar_log,
+                args=(st.session_state["nome_usuario"], "DOWNLOAD_ESCALA", f"{nome_arquivo_target} | Matrícula: {matricula}")
             )
         else:
             st.button(f"❌ Escala do {nome_exibicao} Não Publicada", key=file_key, disabled=True)
-            
         st.markdown("<br>", unsafe_allow_html=True)
 
 # =====================================================
@@ -522,19 +492,26 @@ def renderizar_tela_login():
     senha = st.sidebar.text_input("Senha Corporativa", type="password")
     
     if st.sidebar.button("Entrar no Sistema"):
-        res = login_usuario_planilha(tipo, login, senha)
-        if res["sucesso"]:
-            st.session_state["logado"] = True
-            st.session_state["usuario_id"] = res["id"]
-            st.session_state["tipo_usuario"] = tipo
-            st.session_state["nome_usuario"] = res["nome"]
-            st.session_state["login_usuario"] = res["login"]
-            st.session_state["primeiro_acesso"] = res["primeiro_acesso"]
-            st.success(f"Autenticado: {res['nome']}")
-            time.sleep(1)
-            st.rerun()
-        else:
-            st.sidebar.error("Credenciais inválidas.")
+        if not supabase:
+            st.sidebar.error("Impossível autenticar. Conexão com banco offline.")
+            return
+            
+        with st.sidebar.spinner("Autenticando..."):
+            res = login_usuario_supabase(tipo, login, senha)
+            
+            if res["sucesso"]:
+                st.session_state["logado"] = True
+                st.session_state["usuario_id"] = res["id"]
+                st.session_state["tipo_usuario"] = tipo
+                st.session_state["nome_usuario"] = res["nome"]
+                st.session_state["login_usuario"] = res["login"]
+                st.session_state["primeiro_acesso"] = res["primeiro_acesso"]
+                st.success(f"Autenticado: {res['nome']}")
+                time.sleep(0.3)
+                st.rerun()
+            else:
+                # EXIBE O ERRO EXATO DETECTADO NO PYTHON
+                st.sidebar.error(f"Senha ou usuário incorreto")
 
 def view_alterar_senha_obrigatoria():
     st.warning("⚠️ Altere sua senha padrão para prosseguir.")
@@ -547,31 +524,38 @@ def view_alterar_senha_obrigatoria():
         elif nova_senha != confirmar:
             st.error("As senhas diferem.")
         else:
-            if alterar_senha_usuario_planilha(st.session_state["usuario_id"], nova_senha):
-                st.success("Senha alterada!")
+            if alterar_senha_usuario_supabase(st.session_state["usuario_id"], nova_senha):
+                st.success("Senha alterada com sucesso!")
                 st.session_state["primeiro_acesso"] = False
-                time.sleep(1)
+                time.sleep(0.3)
                 st.rerun()
 
-# Fluxo de Execução
-if not st.session_state["logado"]:
-    renderizar_tela_login()
-    st.info("Acesse a barra lateral esquerda para entrar com suas credenciais.")
-elif st.session_state["primeiro_acesso"]:
-    view_alterar_senha_obrigatoria()
+# Fluxo de Execução Principal
+if not supabase:
+    st.error("🛑 Erro de Conexão: Não foi possível estabelecer conexão com o banco de dados Supabase. Verifique suas configurações no painel 'Secrets' do Streamlit Cloud.")
 else:
-    st.sidebar.write(f"Usuário ativo: **{st.session_state['nome_usuario']}**")
-    st.sidebar.write(f"Credencial: `{st.session_state['tipo_usuario'].upper()}`")
-    
-    if st.session_state["tipo_usuario"] == "admin":
-        menu = st.sidebar.radio("Navegação", ["Painel Admin", "Relatório de Logs"])
-        if menu == "Painel Admin":
-            view_gerenciar_escala_admin()
-        elif menu == "Relatório de Logs":
-            st.subheader("📋 Auditoria Geral de Acesso a Escalas")
-            st.dataframe(carregar_logs(), use_container_width=True)
+    if not st.session_state["logado"]:
+        renderizar_tela_login()
+        st.info("Acesse a barra lateral esquerda para entrar com suas credenciais.")
+    elif st.session_state["primeiro_acesso"]:
+        view_alterar_senha_obrigatoria()
     else:
-        view_visualizar_escala_usuario()
+        st.sidebar.write(f"Usuário ativo: **{st.session_state['nome_usuario']}**")
+        st.sidebar.write(f"Credencial: `{st.session_state['tipo_usuario'].upper()}`")
         
-    if st.sidebar.button("Desconectar / Sair"):
-        logout()
+        if st.session_state["tipo_usuario"] == "admin":
+            menu = st.sidebar.radio("Navegação", ["Painel Admin", "Relatório de Logs"])
+            if menu == "Painel Admin":
+                view_gerenciar_escala_admin()
+            elif menu == "Relatório de Logs":
+                st.subheader("📋 Auditoria Geral de Acesso a Escalas")
+                df_logs = carregar_logs()
+                if not df_logs.empty:
+                    st.dataframe(df_logs[["data", "hora", "usuario", "acao", "detalhes"]], use_container_width=True)
+                else:
+                    st.info("Nenhum log registrado.")
+        else:
+            view_visualizar_escala_usuario()
+            
+        if st.sidebar.button("Desconectar / Sair"):
+            logout()
